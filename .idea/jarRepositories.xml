@@ -2,19 +2,24 @@
 <project version="4">
   <component name="RemoteRepositoriesConfiguration">
     <remote-repository>
+      <option name="id" value="local-maven-repo" />
+      <option name="name" value="local-maven-repo" />
+      <option name="url" value="file:////home/nico/IdeaProjects/TFG_Nicolas_Sarabia/ArduSim-refactor/local-maven-repo" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="central" />
       <option name="name" value="Central Repository" />
       <option name="url" value="https://repo.maven.apache.org/maven2" />
     </remote-repository>
     <remote-repository>
-      <option name="id" value="local-maven-repo" />
-      <option name="name" value="local-maven-repo" />
-      <option name="url" value="file:////home/nico/IdeaProjects/ardusim/local-maven-repo" />
-    </remote-repository>
-    <remote-repository>
       <option name="id" value="repo-including-sigar" />
       <option name="name" value="repo-including-sigar" />
       <option name="url" value="https://maven.repository.redhat.com/ga/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="local-maven-repo" />
+      <option name="name" value="local-maven-repo" />
+      <option name="url" value="file:////home/nico/IdeaProjects/ardusim/local-maven-repo" />
     </remote-repository>
     <remote-repository>
       <option name="id" value="central" />

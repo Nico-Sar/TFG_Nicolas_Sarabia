@@ -1,5 +1,5 @@
 /bin
-/target/*
+/target/classes
 !/target/ardusim.ini
 !/target/arducopter
 !/target/arducopter.exe
