@@ -65,12 +65,15 @@ public class magneticSwarmRecDialogController {
             String annotation = var.getAnnotatedType().getType().getTypeName();
             if (annotation.contains("javafx")) {
                 try {
+                    Object fieldInstance = var.get(this);
+                    if (fieldInstance == null) continue;
+
                     Method getValue = null;
                     if (annotation.contains("TextField")) {
-                        getValue = var.get(this).getClass().getMethod("getCharacters");
+                        getValue = fieldInstance.getClass().getMethod("getText");
                     }
                     if (getValue != null) {
-                        String value = String.valueOf(getValue.invoke(var.get(this)));
+                        String value = String.valueOf(getValue.invoke(fieldInstance));
                         p.setProperty(var.getName(), value);
                     }
                 } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
