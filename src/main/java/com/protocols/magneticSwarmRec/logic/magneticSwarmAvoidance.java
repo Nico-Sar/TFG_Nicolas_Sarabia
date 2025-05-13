@@ -76,12 +76,27 @@ public class magneticSwarmAvoidance extends Thread {
 
     private Vector calculateRepulsion() {
         Vector totalRepulsion = new Vector();
-        for(Location3DUTM obstacle:communication.getObstacles()) {
+        Location3DUTM current = getCopterLocation();
+
+        for(Location3DUTM obstacle : communication.getObstacles()) {
+            double distance = obstacle.distance3D(current);
+            if (distance < 5.0) {
+                // Aplicar evasión fuerte
+                Vector evasion = new Vector(obstacle, current);
+                evasion.z = 0;
+                evasion.normalize();
+                evasion.scalarProduct(maxspeed);
+                return evasion;  // Reacciona directamente
+            }
+
             Vector repulsion = getRepulsionVector(obstacle);
             totalRepulsion = Vector.add(totalRepulsion, repulsion);
         }
+
+        totalRepulsion.scalarProduct(1.5);  // Potencia repulsión total
         return totalRepulsion;
     }
+
 
     private void takeoff() {
         TakeOff takeOff = copter.takeOff(magneticSwarmRecSimProperties.altitude, new TakeOffListener() {
