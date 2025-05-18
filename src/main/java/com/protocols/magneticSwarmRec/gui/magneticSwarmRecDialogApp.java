@@ -20,22 +20,27 @@ public class magneticSwarmRecDialogApp extends Application {
     @Override
     public void start(Stage stage) {
         magneticSwarmRecSimProperties properties = new magneticSwarmRecSimProperties();
-        ResourceBundle resources = null;
-        try {
-            FileInputStream fis = new FileInputStream(SimParam.protocolParamFile);
+        ResourceBundle resources;
+
+        // Carga el archivo de configuración del protocolo
+        try (FileInputStream fis = new FileInputStream(SimParam.protocolParamFile)) {
             resources = new PropertyResourceBundle(fis);
-            fis.close();
         } catch (IOException e) {
             ArduSimTools.warnGlobal(Text.LOADING_ERROR, Text.PROTOCOL_PARAMETERS_FILE_NOT_FOUND);
-            System.exit(0);
+            System.exit(1);
+            return;
         }
 
-        FXMLLoader loader = null;
+        // Carga del archivo FXML
+        FXMLLoader loader = new FXMLLoader();
         try {
             URL url = new File("src/main/resources/protocols/magneticSwarmRec/magneticSwarmRec.fxml").toURI().toURL();
-            loader = new FXMLLoader(url);
+            loader.setLocation(url);
         } catch (IOException e) {
             e.printStackTrace();
+            ArduSimTools.warnGlobal(Text.LOADING_ERROR, Text.ERROR_LOADING_FXML);
+            System.exit(1);
+            return;
         }
 
         magneticSwarmRecDialogController controller = new magneticSwarmRecDialogController(resources, properties, stage);
@@ -43,11 +48,13 @@ public class magneticSwarmRecDialogApp extends Application {
         loader.setResources(resources);
 
         stage.setTitle("Magnetic Swarm Reconfiguration");
+
         try {
             stage.setScene(new Scene(loader.load()));
         } catch (IOException e) {
             e.printStackTrace();
             ArduSimTools.warnGlobal(Text.LOADING_ERROR, Text.ERROR_LOADING_FXML);
+            System.exit(1);
         }
 
         stage.setOnCloseRequest(event -> System.exit(0));

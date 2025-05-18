@@ -33,6 +33,9 @@ public class magneticSwarmRecDialogController {
     @FXML private TextField NElon;
     @FXML private TextField minFlightDistance;
     @FXML private TextField seed;
+    @FXML private TextField dirFactor;
+    @FXML private TextField dirRatio;
+    @FXML private TextField alpha;
 
     public magneticSwarmRecDialogController(ResourceBundle resources, magneticSwarmRecSimProperties properties, Stage stage) {
         this.resources = resources;

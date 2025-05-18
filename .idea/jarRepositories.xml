@@ -4,6 +4,11 @@
     <remote-repository>
       <option name="id" value="local-maven-repo" />
       <option name="name" value="local-maven-repo" />
+      <option name="url" value="file:////home/nico/IdeaProjects/TFG_Nicolas_Sarabia/local-maven-repo" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="local-maven-repo" />
+      <option name="name" value="local-maven-repo" />
       <option name="url" value="file:////home/nico/IdeaProjects/TFG_Nicolas_Sarabia/ArduSim-refactor/local-maven-repo" />
     </remote-repository>
     <remote-repository>

@@ -23,13 +23,16 @@ public class magneticSwarmRecSimProperties {
     public static double NElon;
     public static double minFlightDistance;
     public static double altitude = 40;
-    public static double frd;
     public static double a;
     public static String repulsionMagnitude;
     public static boolean randomPath;
     public static List<File> missionFile;
     public static int seed;
     public static int beaconingTime;
+    public static double frd = 30;         // Full Repulsion Distance
+    public static double alpha = 20;       // Ancho de la parábola gamma
+    public static double dirFactor = 2;    // Control del ángulo central
+    public static double dirRatio = 0.3;   // Repulsión base (omnidireccional)
 
     private Random random;
 
@@ -48,14 +51,15 @@ public class magneticSwarmRecSimProperties {
         for (Object keyObj : parameters.keySet()) {
             String key = keyObj.toString();
             String value = parameters.getProperty(key);
-            if (!variablesDict.containsKey(key)) continue;
+            if (!variablesDict.containsKey(key) || value == null || value.trim().isEmpty()) continue;
             Field var = variablesDict.get(key);
             try {
                 String type = var.getType().toString();
                 if (type.equals("int")) {
-                    var.setInt(this, Integer.parseInt(value));
+                    var.setInt(this, Integer.parseInt(value.trim()));
                 } else if (type.equals("double")) {
-                    var.setDouble(this, Double.parseDouble(value));
+                    var.setDouble(this, Double.parseDouble(value.trim()));
+
                 } else if (type.contains("java.lang.String")) {
                     var.set(this, value);
                 } else if (type.contains("boolean")) {

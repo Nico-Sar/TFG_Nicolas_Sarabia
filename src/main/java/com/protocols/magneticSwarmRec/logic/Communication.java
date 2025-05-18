@@ -17,7 +17,7 @@ public class Communication extends Thread {
     private final int numUAV;
     private final Copter copter;
     private final HighlevelCommLink commLink;
-    private final Map<Integer, Pair<Long, Location3DUTM>> locations;
+    private final Map<Integer, Pair<Long, Pair<Location3DUTM, Double>>> locations; // heading incluido
     private boolean running;
 
     public Communication(int numUAV) {
@@ -32,18 +32,28 @@ public class Communication extends Thread {
     public void run() {
         while (running) {
             long start = System.currentTimeMillis();
-            commLink.sendJSON(Message.location(numUAV, getCopterLocation()));
+
+            try {
+                commLink.sendJSON(Message.location(numUAV, getCopterLocation(), getHeading()));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
             long timeDif = System.currentTimeMillis() - start;
-            JSONObject msg = commLink.receiveMessage(Message.location(numUAV));
-            while (msg != null && timeDif < magneticSwarmRecSimProperties.beaconingTime) {
-                int senderId = (Integer) msg.get(HighlevelCommLink.Keywords.SENDERID);
-                Location3DUTM obstacle = Message.processLocation(msg);
-                long timeStamp = System.currentTimeMillis();
-                locations.put(senderId, new Pair<>(timeStamp, obstacle));
+            try {
+                JSONObject msg = commLink.receiveMessage(Message.location(numUAV));
+                long currentTime = System.currentTimeMillis();
 
-                msg = commLink.receiveMessage(Message.location(numUAV));
-                timeDif = System.currentTimeMillis() - start;
+                while (msg != null && timeDif < magneticSwarmRecSimProperties.beaconingTime) {
+                    int senderId = (Integer) msg.get(HighlevelCommLink.Keywords.SENDERID);
+                    Pair<Location3DUTM, Double> data = Message.processLocationWithHeading(msg);
+                    locations.put(senderId, new Pair<>(currentTime, data));
+
+                    msg = commLink.receiveMessage(Message.location(numUAV));
+                    timeDif = System.currentTimeMillis() - start;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
 
             if (timeDif < magneticSwarmRecSimProperties.beaconingTime) {
@@ -52,19 +62,23 @@ public class Communication extends Thread {
         }
     }
 
-    public List<Location3DUTM> getObstacles() {
-        Set<Integer> expired = new HashSet<>();
+    public List<Pair<Location3DUTM, Double>> getObstaclesWithHeading() {
+        List<Pair<Location3DUTM, Double>> obstacles = new ArrayList<>();
         long now = System.currentTimeMillis();
-        for (int i : locations.keySet()) {
-            if (now - locations.get(i).getValue0() > 5000) {
-                expired.add(i);
+        Set<Integer> expired = new HashSet<>();
+
+        for (Map.Entry<Integer, Pair<Long, Pair<Location3DUTM, Double>>> entry : locations.entrySet()) {
+            if (now - entry.getValue().getValue0() > 5000) {
+                expired.add(entry.getKey());
+            } else {
+                obstacles.add(entry.getValue().getValue1());
             }
         }
-        locations.keySet().removeAll(expired);
-        List<Location3DUTM> obstacles = new ArrayList<>();
-        for (Pair<Long, Location3DUTM> p : locations.values()) {
-            obstacles.add(p.getValue1());
+
+        for (Integer id : expired) {
+            locations.remove(id);
         }
+
         return obstacles;
     }
 
@@ -73,6 +87,10 @@ public class Communication extends Thread {
     }
 
     private Location3DUTM getCopterLocation() {
-        return new Location3DUTM(copter.getLocationUTM(), 0); // Altitud fija o ignorada
+        return new Location3DUTM(copter.getLocationUTM(), 0);
+    }
+
+    private double getHeading() {
+        return Math.toRadians(copter.getHeading()); // conversión a radianes
     }
 }

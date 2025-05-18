@@ -77,13 +77,19 @@ public class magneticSwarmRecHelper extends ProtocolHelper {
         Pair<Location2DGeo, Double>[] startingLocations = new Pair[numUAVs];
 
         List<Waypoint>[] missions = API.getCopter(0).getMissionHelper().getMissionsLoaded();
+
         for (int i = 0; i < numUAVs; i++) {
-            Waypoint wp = missions[i].get(1); // Primer punto válido
+            List<Waypoint> uavMission = missions[i];
+            if (uavMission == null || uavMission.size() < 2) {
+                API.getGUI(0).exit("ERROR: UAV " + i + " has invalid mission data.");
+            }
+            Waypoint wp = uavMission.get(1);  // Primer punto válido después del dummy
             startingLocations[i] = Pair.with(new Location2DGeo(wp.getLatitude(), wp.getLongitude()), 0.0);
         }
 
         return startingLocations;
     }
+
 
     @Override
     public boolean sendInitialConfiguration(int numUAV) {
