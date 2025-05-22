@@ -1,8 +1,1 @@
-/bin
-/target/classes
-!/target/ardusim.ini
-!/target/arducopter
-!/target/arducopter.exe
-!/target/copter.param
-!/target/speed.csv
-/target/
+

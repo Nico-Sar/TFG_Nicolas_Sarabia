@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
+      spacing="8">
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <Label text="Magnetic Swarm Reconfiguration Parameters" style="-fx-font-size: 16px; -fx-font-weight: bold;" />
+
+    <HBox spacing="10"><Label text="Altitude" prefWidth="150"/><TextField fx:id="altitude" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Speed (m/s)" prefWidth="150"/><TextField fx:id="speed" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Full Repulsion Distance (frd)" prefWidth="150"/><TextField fx:id="frd" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Alpha (width)" prefWidth="150"/><TextField fx:id="alpha" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Direction Factor (df)" prefWidth="150"/><TextField fx:id="dirFactor" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Direction Ratio (dr)" prefWidth="150"/><TextField fx:id="dirRatio" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Trajectory Distance (tDist)" prefWidth="150"/><TextField fx:id="tDist" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Weight Attraction" prefWidth="150"/><TextField fx:id="weightAttraction" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Weight Repulsion" prefWidth="150"/><TextField fx:id="weightRepulsion" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Min Flight Distance" prefWidth="150"/><TextField fx:id="minFlightDistance" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Beaconing Time (ms)" prefWidth="150"/><TextField fx:id="beaconingTime" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Seed" prefWidth="150"/><TextField fx:id="seed" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Repulsion Magnitude" prefWidth="150"/><TextField fx:id="repulsionMagnitude" prefWidth="200"/></HBox>
+
+    <HBox spacing="10">
+        <Label text="Number of UAVs" prefWidth="150"/>
+        <VBox spacing="5">
+            <TextField fx:id="numUAVs" prefWidth="200"/>
+            <Label fx:id="numUAVsWarning" text="Número de UAVs determinado por la misión." style="-fx-text-fill: red;" visible="false"/>
+        </VBox>
+    </HBox>
+
+    <HBox spacing="10"><Label text="Ground Formation" prefWidth="150"/><ComboBox fx:id="groundFormation" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Flying Formation" prefWidth="150"/><ComboBox fx:id="flyingFormation" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Configuration Mode" prefWidth="150"/><ComboBox fx:id="configMode" prefWidth="200"/></HBox>
+
+    <Button fx:id="okButton" text="OK" prefWidth="100" style="-fx-font-size: 14px; -fx-font-weight: bold;" />
+</VBox>
