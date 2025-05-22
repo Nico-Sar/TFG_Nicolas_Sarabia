@@ -1,17 +1,17 @@
 package com.protocols.magneticSwarmRec.gui;
 
+import com.api.API;
 import com.api.ArduSimTools;
+import com.api.swarm.formations.Formation;
+import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.setup.Param;
 import com.setup.Text;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
-import javafx.scene.control.Button;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.stage.Stage;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Properties;
 import java.util.ResourceBundle;
 
@@ -22,20 +22,13 @@ public class magneticSwarmRecDialogController {
     private final magneticSwarmRecSimProperties properties;
 
     @FXML private Button okButton;
-    @FXML private TextField altitude;
-    @FXML private TextField frd;
-    @FXML private TextField a;
-    @FXML private TextField repulsionMagnitude;
-    @FXML private TextField beaconingTime;
-    @FXML private TextField SWlat;
-    @FXML private TextField SWlon;
-    @FXML private TextField NElat;
-    @FXML private TextField NElon;
-    @FXML private TextField minFlightDistance;
-    @FXML private TextField seed;
-    @FXML private TextField dirFactor;
-    @FXML private TextField dirRatio;
-    @FXML private TextField alpha;
+
+    @FXML private TextField altitude, speed, frd, alpha, dirFactor, dirRatio, tDist;
+    @FXML private TextField weightAttraction, weightRepulsion, minFlightDistance, beaconingTime, seed;
+    @FXML private TextField repulsionMagnitude, numUAVs;
+
+    @FXML private ComboBox<String> configMode, groundFormation, flyingFormation;
+    @FXML private Label numUAVsWarning;
 
     public magneticSwarmRecDialogController(ResourceBundle resources, magneticSwarmRecSimProperties properties, Stage stage) {
         this.resources = resources;
@@ -44,9 +37,49 @@ public class magneticSwarmRecDialogController {
     }
 
     @FXML
-    public void initialize(){
+    public void initialize() {
+        preloadFieldsFromProperties();
+
+        configMode.getItems().addAll("Formation", "Single");
+        configMode.setValue(magneticSwarmRecSimProperties.configMode.toLowerCase());
+
+        for (Formation.Layout layout : Formation.Layout.values()) {
+            groundFormation.getItems().add(layout.name());
+            flyingFormation.getItems().add(layout.name());
+        }
+
+        groundFormation.setValue(magneticSwarmRecSimProperties.groundFormation.toUpperCase());
+        flyingFormation.setValue(magneticSwarmRecSimProperties.flyingFormation.toUpperCase());
+
+        // Activar/desactivar campos de formación según el modo
+        configMode.setOnAction(e -> {
+            boolean isFormation = "formation".equalsIgnoreCase(configMode.getValue());
+            groundFormation.setDisable(!isFormation);
+            flyingFormation.setDisable(!isFormation);
+            if (!isFormation) {
+                groundFormation.setValue("");
+                flyingFormation.setValue("");
+            }
+        });
+
+        // Comprobación si el número de UAVs debe ser editable
+        int numFromMission = API.getArduSim().getNumUAVs();
+        if (!magneticSwarmRecSimProperties.randomPath && numFromMission > 0) {
+            numUAVs.setText(String.valueOf(magneticSwarmRecSimProperties.numUAVs));
+            numUAVs.setDisable(false); // siempre editable
+            if (numUAVsWarning != null) {
+                numUAVsWarning.setVisible(false);
+            }
+        } else {
+            numUAVs.setText(String.valueOf(magneticSwarmRecSimProperties.numUAVs));
+            numUAVs.setDisable(false);
+            if (numUAVsWarning != null) {
+                numUAVsWarning.setVisible(false);
+            }
+        }
+
         okButton.setOnAction(e -> {
-            if(ok()){
+            if (ok()) {
                 Platform.setImplicitExit(false);
                 Param.simStatus = Param.SimulatorState.STARTING_UAVS;
                 okButton.getScene().getWindow().hide();
@@ -64,26 +97,51 @@ public class magneticSwarmRecDialogController {
     private Properties createProperties() {
         Properties p = new Properties();
         Field[] variables = this.getClass().getDeclaredFields();
-        for (Field var : variables) {
-            String annotation = var.getAnnotatedType().getType().getTypeName();
-            if (annotation.contains("javafx")) {
-                try {
-                    Object fieldInstance = var.get(this);
-                    if (fieldInstance == null) continue;
 
-                    Method getValue = null;
-                    if (annotation.contains("TextField")) {
-                        getValue = fieldInstance.getClass().getMethod("getText");
+        for (Field var : variables) {
+            try {
+                var.setAccessible(true);
+                String name = var.getName();
+                String type = var.getType().getSimpleName();
+
+                if (type.equals("TextField")) {
+                    TextField field = (TextField) var.get(this);
+                    if (field != null && !field.isDisabled()) {
+                        String value = field.getText().trim();
+                        if (!value.isEmpty()) {
+                            p.setProperty(name, value);
+                        }
                     }
-                    if (getValue != null) {
-                        String value = String.valueOf(getValue.invoke(fieldInstance));
-                        p.setProperty(var.getName(), value);
+                } else if (type.equals("ComboBox")) {
+                    ComboBox<String> box = (ComboBox<String>) var.get(this);
+                    if (box != null && box.getValue() != null && !box.getValue().isEmpty()) {
+                        p.setProperty(name, box.getValue());
                     }
-                } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                    e.printStackTrace();
                 }
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
             }
         }
         return p;
+    }
+
+    private void preloadFieldsFromProperties() {
+        try {
+            altitude.setText(String.valueOf(magneticSwarmRecSimProperties.altitude));
+            speed.setText(String.valueOf(magneticSwarmRecSimProperties.speed));
+            frd.setText(String.valueOf(magneticSwarmRecSimProperties.frd));
+            alpha.setText(String.valueOf(magneticSwarmRecSimProperties.alpha));
+            dirFactor.setText(String.valueOf(magneticSwarmRecSimProperties.dirFactor));
+            dirRatio.setText(String.valueOf(magneticSwarmRecSimProperties.dirRatio));
+            tDist.setText(String.valueOf(magneticSwarmRecSimProperties.tDist));
+            weightAttraction.setText(String.valueOf(magneticSwarmRecSimProperties.weightAttraction));
+            weightRepulsion.setText(String.valueOf(magneticSwarmRecSimProperties.weightRepulsion));
+            minFlightDistance.setText(String.valueOf(magneticSwarmRecSimProperties.minFlightDistance));
+            beaconingTime.setText(String.valueOf(magneticSwarmRecSimProperties.beaconingTime));
+            seed.setText(String.valueOf(magneticSwarmRecSimProperties.seed));
+            repulsionMagnitude.setText(magneticSwarmRecSimProperties.repulsionMagnitude);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

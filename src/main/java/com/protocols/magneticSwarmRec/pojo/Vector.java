@@ -25,6 +25,13 @@ public class Vector {
         this.y = v.y;
         this.z = v.z;
     }
+    // Constructor explícito 2D (z = 0)
+    public Vector(double x, double y) {
+        this.x = x;
+        this.y = y;
+        this.z = 0;
+    }
+
 
     // Constructor desde dos ubicaciones (de -> hacia)
     public Vector(Location3DUTM from, Location3DUTM to) {
@@ -50,6 +57,9 @@ public class Vector {
     // Producto escalar
     public static double dot(Vector v1, Vector v2) {
         return v1.x * v2.x + v1.y * v2.y;
+    }
+    public Vector scaledCopy(double factor) {
+        return new Vector(this.x * factor, this.y * factor, 0);
     }
 
     public double dot(Vector other) {

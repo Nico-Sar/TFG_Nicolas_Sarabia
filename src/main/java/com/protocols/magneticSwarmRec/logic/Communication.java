@@ -68,12 +68,16 @@ public class Communication extends Thread {
         Set<Integer> expired = new HashSet<>();
 
         for (Map.Entry<Integer, Pair<Long, Pair<Location3DUTM, Double>>> entry : locations.entrySet()) {
+            int senderId = entry.getKey();
+            if (senderId == numUAV) continue;
+
             if (now - entry.getValue().getValue0() > 5000) {
-                expired.add(entry.getKey());
+                expired.add(senderId);
             } else {
                 obstacles.add(entry.getValue().getValue1());
             }
         }
+
 
         for (Integer id : expired) {
             locations.remove(id);
