@@ -12,6 +12,7 @@ public class Message {
 
     private static final int LOCATION = 1;
 
+    // Envío clásico (sin estado)
     public static JSONObject location(int numUAV, Location3DUTM loc, double heading) {
         JSONObject msg = new JSONObject();
         msg.put(HighlevelCommLink.Keywords.SENDERID, numUAV);
@@ -22,8 +23,15 @@ public class Message {
         location.put("y", loc.y);
         location.put("z", 0); // 2D
         msg.put("location", location);
-        msg.put("heading", heading); // dirección del UAV en radianes
+        msg.put("heading", heading);
 
+        return msg;
+    }
+
+    // Nueva versión: incluye estado (MOVING, HOVERING, etc.)
+    public static JSONObject location(int numUAV, Location3DUTM loc, double heading, String state) {
+        JSONObject msg = location(numUAV, loc, heading); // llama al método anterior
+        msg.put("state", state); // estado adicional
         return msg;
     }
 
@@ -44,5 +52,10 @@ public class Message {
             return Pair.with(new Location3DUTM(x, y, z), heading);
         }
         return null;
+    }
+
+
+    public static String getState(JSONObject msg) {
+        return msg.optString("state", "MOVING");
     }
 }

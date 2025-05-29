@@ -5,6 +5,7 @@ import com.api.communications.HighlevelCommLink;
 import com.api.copter.Copter;
 import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.protocols.magneticSwarmRec.pojo.Message;
+import com.protocols.magneticSwarmRec.pojo.UAVStateEntry;
 import es.upv.grc.mapper.Location3DUTM;
 import org.javatuples.Pair;
 import org.json.JSONObject;
@@ -17,8 +18,9 @@ public class Communication extends Thread {
     private final int numUAV;
     private final Copter copter;
     private final HighlevelCommLink commLink;
-    private final Map<Integer, Pair<Long, Pair<Location3DUTM, Double>>> locations; // heading incluido
+    private final Map<Integer, UAVStateEntry> locations;
     private boolean running;
+    private boolean isHovering = false;
 
     public Communication(int numUAV) {
         this.numUAV = numUAV;
@@ -28,13 +30,17 @@ public class Communication extends Thread {
         this.running = true;
     }
 
+    public void setHovering(boolean hovering) {
+        this.isHovering = hovering;
+    }
+
     @Override
     public void run() {
         while (running) {
             long start = System.currentTimeMillis();
 
             try {
-                commLink.sendJSON(Message.location(numUAV, getCopterLocation(), getHeading()));
+                commLink.sendJSON(Message.location(numUAV, getCopterLocation(), getHeading(), isHovering ? "HOVERING" : "MOVING"));
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -47,7 +53,8 @@ public class Communication extends Thread {
                 while (msg != null && timeDif < magneticSwarmRecSimProperties.beaconingTime) {
                     int senderId = (Integer) msg.get(HighlevelCommLink.Keywords.SENDERID);
                     Pair<Location3DUTM, Double> data = Message.processLocationWithHeading(msg);
-                    locations.put(senderId, new Pair<>(currentTime, data));
+                    String state = Message.getState(msg);
+                    locations.put(senderId, new UAVStateEntry(currentTime, data, state));
 
                     msg = commLink.receiveMessage(Message.location(numUAV));
                     timeDif = System.currentTimeMillis() - start;
@@ -67,23 +74,38 @@ public class Communication extends Thread {
         long now = System.currentTimeMillis();
         Set<Integer> expired = new HashSet<>();
 
-        for (Map.Entry<Integer, Pair<Long, Pair<Location3DUTM, Double>>> entry : locations.entrySet()) {
+        for (Map.Entry<Integer, UAVStateEntry> entry : locations.entrySet()) {
             int senderId = entry.getKey();
             if (senderId == numUAV) continue;
 
-            if (now - entry.getValue().getValue0() > 5000) {
+            if (now - entry.getValue().timestamp > 5000) {
                 expired.add(senderId);
             } else {
-                obstacles.add(entry.getValue().getValue1());
+                String state = entry.getValue().state;
+                if (state.equals("MOVING") || state.equals("HOVERING")) {
+                    obstacles.add(entry.getValue().positionAndHeading);
+                }
             }
         }
-
 
         for (Integer id : expired) {
             locations.remove(id);
         }
 
         return obstacles;
+    }
+
+    public boolean allUAVsHovering() {
+        int total = API.getArduSim().getNumUAVs();
+        int count = 1; // este UAV
+
+        for (Map.Entry<Integer, UAVStateEntry> entry : locations.entrySet()) {
+            if (entry.getKey() == numUAV) continue;
+            if ("HOVERING".equals(entry.getValue().state)) {
+                count++;
+            }
+        }
+        return count == total;
     }
 
     public void stopCommunication() {

@@ -18,7 +18,6 @@ import net.objecthunter.exp4j.ExpressionBuilder;
 import org.javatuples.Pair;
 import com.protocols.magneticSwarmRec.logic.DrawVectors;
 
-
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -37,6 +36,9 @@ public class magneticSwarmAvoidance extends Thread {
     private double minDistance = Double.MAX_VALUE;
     private final double maxspeed;
     private final DrawVectors drawVectors;
+
+    private enum UAVState { MOVING, HOVERING, LANDING }
+    private UAVState state = UAVState.MOVING;
 
     public magneticSwarmAvoidance(int numUAV) {
         this.numUAV = numUAV;
@@ -71,48 +73,53 @@ public class magneticSwarmAvoidance extends Thread {
         long start = System.currentTimeMillis();
         API.getArduSim().sleep(2000);
 
-        // Medición del tiempo de reconfiguración
         long reconfigStart = System.currentTimeMillis();
         switchToFlyingFormation();
         long reconfigEnd = System.currentTimeMillis();
         long reconfigDuration = reconfigEnd - reconfigStart;
 
-        while (!waypoints.isEmpty()) {
-            while (!waypointReached()) {
-                Vector attraction = getAttractionVector();
-                Vector repulsion = calculateHybridRepulsion();
+        while (true) {
+            switch (state) {
+                case MOVING:
+                    if (!waypoints.isEmpty() && !waypointReached()) {
+                        Vector attraction = getAttractionVector();
+                        Vector repulsion = calculateHybridRepulsion();
 
-                 attraction = getAttractionVector();
-                 repulsion = calculateHybridRepulsion();
+                        Vector finalVector = Vector.add(
+                                attraction.scaledCopy(magneticSwarmRecSimProperties.weightAttraction),
+                                repulsion.scaledCopy(magneticSwarmRecSimProperties.weightRepulsion));
 
-                Vector finalVector = Vector.add(
-                        magneticSwarmRecSimProperties.weightAttraction > 0 ? attraction.scaledCopy(magneticSwarmRecSimProperties.weightAttraction) : attraction,
-                        magneticSwarmRecSimProperties.weightRepulsion > 0 ? repulsion.scaledCopy(magneticSwarmRecSimProperties.weightRepulsion) : repulsion
-                );
+                        drawVectors.update(attraction, repulsion, finalVector);
+                        finalVector = reduceToMaxSpeed(finalVector);
+                        moveUAV(finalVector);
+                        logMinDistance();
+                    } else if (!waypoints.isEmpty()) {
+                        waypoints.poll();
+                    } else {
+                        state = UAVState.HOVERING;
+                        communication.setHovering(true);
+                    }
+                    break;
 
-// 🔍 Log para consola
-                System.out.printf("UAV %d\n -> Attraction Vector: (%.2f, %.2f)\n -> Repulsion Vector: (%.2f, %.2f)\n -> Final Vector: (%.2f, %.2f)\n",
-                        numUAV,
-                        attraction.x, attraction.y,
-                        repulsion.x, repulsion.y,
-                        finalVector.x, finalVector.y);
+                case HOVERING:
+                    moveUAV(new Vector(0, 0));
+                    communication.setHovering(true);
+                    if (communication.allUAVsHovering()) {
+                        state = UAVState.LANDING;
+                    }
+                    break;
 
-// 🧭 Visualización en el mapa
-                drawVectors.update(attraction, repulsion, finalVector);
-
-                finalVector = reduceToMaxSpeed(finalVector);
-                moveUAV(finalVector);
-                logMinDistance();
-                API.getArduSim().sleep(100);
+                case LANDING:
+                    communication.stopCommunication();
+                    land();
+                    long protocolTime = System.currentTimeMillis() - start;
+                    saveData(protocolTime, reconfigDuration);
+                    return;
             }
-            waypoints.poll();
+            API.getArduSim().sleep(100);
         }
-
-        long protocolTime = System.currentTimeMillis() - start;
-        communication.stopCommunication();
-        land();
-        saveData(protocolTime, reconfigDuration);
     }
+
 
     private Vector calculateHybridRepulsion() {
         Vector totalRepulsion = new Vector();
