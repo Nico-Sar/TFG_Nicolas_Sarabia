@@ -115,6 +115,16 @@ public class Communication extends Thread {
     private Location3DUTM getCopterLocation() {
         return new Location3DUTM(copter.getLocationUTM(), 0);
     }
+    public boolean isUAVHovering(Location3DUTM location) {
+        for (Map.Entry<Integer, UAVStateEntry> entry : locations.entrySet()) {
+            Location3DUTM loc = entry.getValue().positionAndHeading.getValue0();
+            if (loc != null && loc.distance3D(location) < 1.0) {
+                return "HOVERING".equals(entry.getValue().state);
+            }
+        }
+        return false;
+    }
+
 
     private double getHeading() {
         return Math.toRadians(copter.getHeading()); // conversión a radianes
