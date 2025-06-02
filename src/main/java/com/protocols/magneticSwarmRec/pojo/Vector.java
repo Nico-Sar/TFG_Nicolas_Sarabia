@@ -85,6 +85,21 @@ public class Vector {
         this.y *= factor;
     }
 
+    public static Vector subtract(Vector v1, Vector v2) {
+        return new Vector(v1.x - v2.x, v1.y - v2.y, 0);
+    }
+
+    public void negate() {
+        this.x = -this.x;
+        this.y = -this.y;
+    }
+
+
+    public void multiply(double factor) {
+        this.scalarProduct(factor);
+    }
+
+
     // Normalización
     public void normalize() {
         double mag = magnitude();

@@ -4,44 +4,33 @@ import com.api.API;
 import com.api.copter.Copter;
 import com.api.copter.TakeOff;
 import com.api.copter.TakeOffListener;
-import com.api.pojo.location.Waypoint;
 import com.api.swarm.formations.Formation;
 import com.api.swarm.formations.FormationFactory;
 import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.protocols.magneticSwarmRec.pojo.HungarianAlgorithm;
 import com.protocols.magneticSwarmRec.pojo.Vector;
 import com.uavController.UAVParam;
-import es.upv.grc.mapper.Location2DGeo;
 import es.upv.grc.mapper.Location3DGeo;
 import es.upv.grc.mapper.Location3DUTM;
-import net.objecthunter.exp4j.Expression;
-import net.objecthunter.exp4j.ExpressionBuilder;
 import org.javatuples.Pair;
-import com.protocols.magneticSwarmRec.logic.DrawVectors;
+
+import java.util.*;
 import java.util.concurrent.CyclicBarrier;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-
 public class magneticSwarmAvoidance extends Thread {
-
     private Queue<Location3DUTM> waypoints;
     private final Copter copter;
-    private final int numUAV;
-    private final int numUAVs;
+    private final int numUAV, numUAVs;
     private final Communication communication;
-    private double minDistance = Double.MAX_VALUE;
     private final double maxspeed;
     private final DrawVectors drawVectors;
-    private static CyclicBarrier barrier;
-
-    private enum UAVState { MOVING, HOVERING, LANDING }
+    private static CyclicBarrier barrier, landingBarrier;
+    private int framesNearTarget = 0, attempts = 0;
+    private final int FRAMES_TO_CONFIRM = 30, maxAttempts = 100;
+    private final double threshold = 2.0;
     private UAVState state = UAVState.MOVING;
+
+    private enum UAVState { MOVING, HOVERING, LANDING, IDLE }
 
     public magneticSwarmAvoidance(int numUAV) {
         this.numUAV = numUAV;
@@ -54,214 +43,62 @@ public class magneticSwarmAvoidance extends Thread {
         synchronized (magneticSwarmAvoidance.class) {
             if (barrier == null) {
                 barrier = new CyclicBarrier(numUAVs);
+                landingBarrier = new CyclicBarrier(numUAVs);
             }
         }
-        System.out.printf("magneticSwarmAvoidance CONSTRUCTOR - UAV %d creado\n", numUAV);
-    }
-
-    private Location3DUTM getCopterLocation() {
-        return new Location3DUTM(copter.getLocationUTM(), copter.getAltitude());
-    }
-
-    private double getHeading() {
-        return Math.toRadians(copter.getHeading());
     }
 
     @Override
     public void run() {
-        System.out.printf("UAV %d - RUNNING thread\n", numUAV);
         takeoff();
         communication.start();
-        long start = System.currentTimeMillis();
-        API.getArduSim().sleep(2000);
-
-        long reconfigStart = System.currentTimeMillis();
-        try {
-            switchToFlyingFormation();
-            System.out.printf("UAV %d - switchToFlyingFormation() completed. Waypoints: %d\n", numUAV, waypoints.size());
-        } catch (Exception e) {
-            System.err.printf("UAV %d - ERROR en switchToFlyingFormation: %s\n", numUAV, e.getMessage());
-            e.printStackTrace();
-        }
-
-        long reconfigEnd = System.currentTimeMillis();
-        long reconfigDuration = reconfigEnd - reconfigStart;
-
+        switchToFlyingFormation();
         while (true) {
             switch (state) {
                 case MOVING:
-                    System.out.printf("UAV %d - MOVING. Waypoints left: %d\n", numUAV, waypoints.size());
-                    if (!waypoints.isEmpty() && !waypointReached()) {
-                        Vector attraction = getAttractionVector();
-                        Vector repulsion = calculateHybridRepulsion();
-                        Vector finalVector = Vector.add(
-                                attraction.scaledCopy(magneticSwarmRecSimProperties.weightAttraction),
-                                repulsion.scaledCopy(magneticSwarmRecSimProperties.weightRepulsion));
-                        drawVectors.update(attraction, repulsion, finalVector);
-                        finalVector = reduceToMaxSpeed(finalVector);
-                        System.out.printf("UAV %d - Moviéndose hacia: (%.2f, %.2f)\n", numUAV, finalVector.x, finalVector.y);
-                        moveUAV(finalVector);
-                        logMinDistance();
-                    } else if (!waypoints.isEmpty()) {
-                        waypoints.poll();
-                    } else if (waypointReached()) {
+                    if (waypoints.isEmpty()) {
                         state = UAVState.HOVERING;
-                        communication.setHovering(true);
-                        System.out.printf("UAV %d - ENTERING HOVERING STATE\n", numUAV);
+                        break;
+                    }
+                    Location3DUTM destino = waypoints.peek();
+                    double dist = getCopterLocation().distance3D(destino);
+                    Vector total = Vector.add(getAttractionVector(), (dist < 2.5) ? new Vector(0, 0) : calculateHybridRepulsion());
+                    sendVelocityCommand(total);
+                    if (dist < threshold || (dist < 3.5 && attempts > 40)) {
+                        waypoints.poll();
+                        attempts = 0;
+                    } else attempts++;
+                    break;
+                case HOVERING:
+                    communication.setHovering(true);
+                    if (communication.allUAVsHovering()) {
+                        try {
+                            landingBarrier.await();
+                            state = UAVState.LANDING;
+                        } catch (Exception ignored) {}
                     } else {
-                        System.out.printf("UAV %d - No more waypoints but not at destination. Correcting.\n", numUAV);
                         Vector correction = new Vector(getCopterLocation(), getLastTarget());
                         correction.normalize();
                         correction.scalarProduct(maxspeed / 4);
                         moveUAV(correction);
                     }
                     break;
-
-                case HOVERING:
-                    communication.setHovering(true);
-                    Location3DUTM currentPos = getCopterLocation();
-                    Location3DUTM target = getLastTarget();
-                    if (target != null) {
-                        double deviation = currentPos.distance3D(target);
-                        System.out.printf("UAV %d - HOVERING. Deviation: %.2f\n", numUAV, deviation);
-                        if (deviation > 0.5) {
-                            Vector correction = new Vector(currentPos, target);
-                            correction.normalize();
-                            correction.scalarProduct(maxspeed / 4);
-                            moveUAV(correction);
-                            System.out.printf("UAV %d - Correcting position in HOVERING\n", numUAV);
-                        } else {
-                            moveUAV(new Vector(0, 0));
-                        }
-                    }
-
-                    if (communication.allUAVsHovering()) {
-                        System.out.printf("UAV %d - All UAVs in hovering. Proceeding to LAND.\n", numUAV);
-                        state = UAVState.LANDING;
-                    }
-                    break;
-
                 case LANDING:
-                    System.out.printf("UAV %d - LANDING\n", numUAV);
                     communication.stopCommunication();
-                    land();
-                    long protocolTime = System.currentTimeMillis() - start;
-                    saveData(protocolTime, reconfigDuration);
+                    copter.land();
                     return;
             }
             API.getArduSim().sleep(100);
         }
     }
 
-
-    private Vector calculateHybridRepulsion() {
-        Vector totalRepulsion = new Vector();
-        Vector headingVec = new Vector(Math.cos(getHeading()), Math.sin(getHeading()));
-        double maxRepulsionMagnitude = maxspeed * 0.8;
-        double cutoff = magneticSwarmRecSimProperties.frd;
-        double mu = magneticSwarmRecSimProperties.dirFactor;
-        double dirRatio = magneticSwarmRecSimProperties.dirRatio;
-
-        List<Pair<Location3DUTM, Double>> obstacles = communication.getObstaclesWithHeading();
-        System.out.printf("UAV %d - Detectados %d obstáculos\n", numUAV, obstacles.size());
-
-        for (Pair<Location3DUTM, Double> obs : obstacles) {
-            Location3DUTM obstacle = obs.getValue0();
-            double dist = getCopterLocation().distance3D(obstacle);
-            System.out.printf("UAV %d - Obstáculo a %.2f m\n", numUAV, dist);
-            if (dist < cutoff) {
-                Vector rep = new Vector(obstacle, getCopterLocation());
-                rep.normalize();
-                double dot = rep.dot(headingVec);
-                double angle = Math.acos(Math.min(Math.max(dot / (rep.magnitude() * headingVec.magnitude()), -1.0), 1.0));
-                double directionFactor = Math.cos(mu * angle);
-                if (directionFactor < 0) directionFactor = dirRatio;
-                Vector directional = rep.scaledCopy(directionFactor);
-                Vector omnidirectional = rep.scaledCopy(1.0);
-                applyMagnitudeFunction(omnidirectional, dist);
-                if (communication.isUAVHovering(obstacle)) {
-                    omnidirectional.scalarProduct(1.5);
-                    System.out.printf("UAV %d - Reforzando repulsión por hovering en obstáculo\n", numUAV);
-                }
-                totalRepulsion = Vector.add(totalRepulsion, directional);
-                totalRepulsion = Vector.add(totalRepulsion, omnidirectional);
-                System.out.printf("UAV %d - Repulsión aplicada: dirección=%.2f, omni=(%.2f, %.2f)\n",
-                        numUAV, directionFactor, omnidirectional.x, omnidirectional.y);
-            } else {
-                System.out.printf("UAV %d - Objeto ignorado (%.2f >= cutoff %.2f)\n", numUAV, dist, cutoff);
-            }
-        }
-
-        if (totalRepulsion.magnitude() > maxRepulsionMagnitude) {
-            totalRepulsion.normalize();
-            totalRepulsion.scalarProduct(maxRepulsionMagnitude);
-            System.out.printf("UAV %d - Repulsión limitada a %.2f m/s\n", numUAV, maxRepulsionMagnitude);
-        }
-
-        return totalRepulsion;
-    }
-
-    private void applyMagnitudeFunction(Vector repulsion, double distance) {
-        try {
-            Expression expr = new ExpressionBuilder(magneticSwarmRecSimProperties.repulsionMagnitude)
-                    .variables("x", "frd", "a")
-                    .build()
-                    .setVariable("x", distance)
-                    .setVariable("frd", magneticSwarmRecSimProperties.frd)
-                    .setVariable("a", magneticSwarmRecSimProperties.alpha);
-            double magnitude = expr.evaluate();
-            repulsion.scalarProduct(magnitude);
-            System.out.printf("UAV %d - Magnitud repulsiva evaluada: %.2f (distancia %.2f)\n", numUAV, magnitude, distance);
-        } catch (Exception e) {
-            System.err.printf("UAV %d - Error evaluando función de repulsión: %s\n", numUAV, e.getMessage());
-        }
-    }
-
-    private Vector getAttractionVector() {
-        Vector attraction = new Vector(getCopterLocation(), waypoints.peek());
-        attraction.normalize();
-        double dist = getCopterLocation().distance3D(waypoints.peek());
-        attraction.scalarProduct(dist > 50 ? maxspeed : maxspeed / 2);
-        return attraction;
-    }
-
-    private Vector reduceToMaxSpeed(Vector v) {
-        if (v.magnitude() > maxspeed) {
-            v.normalize();
-            v.scalarProduct(maxspeed);
-        }
-        return v;
-    }
-
-    private void moveUAV(Vector resulting) {
-        copter.moveTo(resulting.y, resulting.x, 0);
-    }
-
     private void takeoff() {
-        System.out.printf("UAV %d: Taking off.\n", numUAV);
         TakeOff takeOff = copter.takeOff(magneticSwarmRecSimProperties.altitude, new TakeOffListener() {
-            @Override public void onCompleteActionPerformed() {
-                System.out.printf("UAV %d: Takeoff complete (callback).\n", numUAV);
-            }
-            @Override public void onFailure() {
-                System.err.printf("UAV %d: Takeoff failed!\n", numUAV);
-            }
+            public void onCompleteActionPerformed() {}
+            public void onFailure() {}
         });
         takeOff.start();
-        try {
-            takeOff.join();
-            System.out.printf("UAV %d: Takeoff join() complete.\n", numUAV);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        System.out.printf("UAV %d: Esperando a que todos terminen el despegue...\n", numUAV);
-        try {
-            barrier.await();
-            System.out.printf("UAV %d: Todos los UAVs han despegado. Continuando.\n", numUAV);
-        } catch (Exception e) {
-            System.err.printf("UAV %d - ERROR esperando en la barrera: %s\n", numUAV, e.getMessage());
-        }
+        try { takeOff.join(); barrier.await(); } catch (Exception ignored) {}
     }
 
     private void switchToFlyingFormation() {
@@ -271,13 +108,7 @@ public class magneticSwarmAvoidance extends Thread {
                 Formation.Layout.valueOf(magneticSwarmRecSimProperties.flyingFormation.toUpperCase())
         );
 
-        System.out.printf("UAV %d - Init formación '%s' con %d UAVs y distancia %.2f\n",
-                numUAV, magneticSwarmRecSimProperties.flyingFormation, numUAVs, magneticSwarmRecSimProperties.flyingDistance);
-
         target.init(numUAVs, magneticSwarmRecSimProperties.flyingDistance);
-
-        System.out.printf("UAV %d - Formación inicializada correctamente\n", numUAV);
-
         double alt = magneticSwarmRecSimProperties.altitude;
 
         double latSum = 0.0, lonSum = 0.0;
@@ -290,12 +121,18 @@ public class magneticSwarmAvoidance extends Thread {
         double centerLon = lonSum / numUAVs;
         Location3DUTM centerUTM = Location3DGeo.getUTM(centerLat, centerLon, alt);
 
-        Location3DUTM[] currentPositions = new Location3DUTM[numUAVs];
-        Location3DUTM[] formationPositions = new Location3DUTM[numUAVs];
-
+        // Debug: imprimir posiciones generadas
+        System.out.println("=== POSICIONES DE LA FORMACIÓN ===");
         for (int i = 0; i < numUAVs; i++) {
-            currentPositions[i] = new Location3DUTM(API.getCopter(i).getLocationUTM(), alt);
+            Location3DUTM p = target.get3DUTMLocation(centerUTM, i);
+            System.out.printf("[%d] -> (%.2f, %.2f, %.2f)\n", i, p.x, p.y, p.z);
+        }
+
+        Location3DUTM[] formationPositions = new Location3DUTM[numUAVs];
+        Location3DUTM[] currentPositions = new Location3DUTM[numUAVs];
+        for (int i = 0; i < numUAVs; i++) {
             formationPositions[i] = target.get3DUTMLocation(centerUTM, i);
+            currentPositions[i] = new Location3DUTM(API.getCopter(i).getLocationUTM(), alt);
         }
 
         double[][] costMatrix = new double[numUAVs][numUAVs];
@@ -305,132 +142,106 @@ public class magneticSwarmAvoidance extends Thread {
             }
         }
 
-        HungarianAlgorithm hungarian = new HungarianAlgorithm(costMatrix);
-        int[] assignment = hungarian.execute();
+        int[] assignment = new HungarianAlgorithm(costMatrix).execute();
 
-        System.out.printf("UAV %d - Asignación calculada. assignment.length = %d\n", numUAV, assignment.length);
-        System.out.printf("UAV %d - Asignación recibida: ", numUAV);
-        for (int i = 0; i < assignment.length; i++) {
-            System.out.print(assignment[i] + " ");
+        System.out.println("=== ASIGNACIÓN HÚNGARA ===");
+        for (int i = 0; i < numUAVs; i++) {
+            int assigned = assignment[i];
+            Location3DUTM start = currentPositions[i];
+            Location3DUTM goal = formationPositions[assigned];
+            System.out.printf("UAV %d -> Posición %d | (%.1f,%.1f) -> (%.1f,%.1f) | Dist=%.2f\n",
+                    i, assigned, start.x, start.y, goal.x, goal.y, start.distance3D(goal));
+
+
         }
-        System.out.println();
 
         int assignedIndex = (numUAV < assignment.length) ? assignment[numUAV] : 0;
-        System.out.printf("UAV %d - Usando assignedIndex = %d\n", numUAV, assignedIndex);
-
+        Location3DUTM targetPos = formationPositions[assignedIndex];
         Location3DUTM current = getCopterLocation();
-        Location3DUTM targetPos = target.get3DUTMLocation(centerUTM, assignedIndex);
 
-        System.out.printf("UAV %d - Assigned to target position #%d: (%.2f, %.2f)\n",
-                numUAV, assignedIndex, targetPos.x, targetPos.y);
-        System.out.printf("UAV %d - Current position: (%.2f, %.2f)\n",
-                numUAV, current.x, current.y);
-
-        int steps = 3;
-        double dx = (targetPos.x - current.x) / steps;
-        double dy = (targetPos.y - current.y) / steps;
+        double midX = current.x + 0.7 * (targetPos.x - current.x);
+        double midY = current.y + 0.7 * (targetPos.y - current.y);
+        Location3DUTM intermediate = new Location3DUTM(midX, midY, alt);
 
         waypoints.clear();
-        for (int i = 1; i <= steps; i++) {
-            Location3DUTM wp = new Location3DUTM(current.x + dx * i, current.y + dy * i, alt);
-            waypoints.add(wp);
-            System.out.printf("UAV %d - Waypoint %d: (%.2f, %.2f)\n", numUAV, i, wp.x, wp.y);
-        }
-    }
-
-    private void land() {
-        copter.land();
-    }
-
-    private void logMinDistance() {
-        for (int i = 0; i < numUAVs; i++) {
-            if (i == numUAV) continue;
-            double dist = UAVParam.distances[numUAV][i].get();
-            if (dist < minDistance) minDistance = dist;
-        }
-    }
-
-    private double previousDistance = Double.MAX_VALUE;
-    private int stagnationCounter = 0;
-
-    private boolean waypointReached() {
-        if (waypoints == null || waypoints.isEmpty()) {
-            System.out.printf("UAV %d - No hay waypoints. Considerado alcanzado.\n", numUAV);
-            return true;
-        }
-
-        Location3DUTM location = waypoints.peek();
-        if (location == null) {
-            System.out.printf("UAV %d - Waypoint null detectado. Considerado alcanzado.\n", numUAV);
-            return true;
-        }
-
-        double threshold = 1.0;
-        double distance = getCopterLocation().distance3D(location);
-        System.out.printf("UAV %d - Distance to target: %.2f (threshold %.2f)\n", numUAV, distance, threshold);
-
-        if (distance < threshold) {
-            previousDistance = Double.MAX_VALUE;
-            stagnationCounter = 0;
-            return true;
-        }
-
-        if (Math.abs(distance - previousDistance) < 0.1) {
-            stagnationCounter++;
-        } else {
-            stagnationCounter = 0;
-            previousDistance = distance;
-        }
-
-        if (stagnationCounter > 30) { // 3 segundos sin avance significativo
-            System.out.printf("UAV %d - Estancamiento detectado. Forzando paso de waypoint.\n", numUAV);
-            previousDistance = Double.MAX_VALUE;
-            stagnationCounter = 0;
-            return true;
-        }
-
-        return false;
+        waypoints.add(intermediate);
+        waypoints.add(targetPos);
     }
 
 
+
+
+    private Vector getAttractionVector() {
+        Vector attraction = new Vector(getCopterLocation(), waypoints.peek());
+        attraction.normalize();
+        double dist = getCopterLocation().distance3D(waypoints.peek());
+        double speed = dist > 50 ? maxspeed :
+                dist > 30 ? maxspeed * 0.8 :
+                        dist > 10 ? maxspeed * 0.6 :
+                                dist > 2 ? maxspeed * 0.4 : maxspeed * 0.2;
+        if (dist < 10) speed *= 1.5;
+        if (dist < 4.0 && attempts > 40) speed *= 0.6;
+        attraction.scalarProduct(speed);
+        return attraction;
+    }
+
+    private Vector calculateHybridRepulsion() {
+        Vector total = new Vector();
+        List<Pair<Location3DUTM, Double>> obstacles = communication.getObstaclesWithHeading();
+        Vector headingVec = new Vector(Math.cos(getHeading()), Math.sin(getHeading()));
+        double cutoff = magneticSwarmRecSimProperties.frd;
+        double mu = magneticSwarmRecSimProperties.dirFactor;
+        double dirRatio = magneticSwarmRecSimProperties.dirRatio;
+
+        for (Pair<Location3DUTM, Double> obs : obstacles) {
+            Location3DUTM obstacle = obs.getValue0();
+            double dist = getCopterLocation().distance3D(obstacle);
+            if (dist < cutoff) {
+                Vector rep = new Vector(obstacle, getCopterLocation());
+                rep.normalize();
+                double dot = rep.dot(headingVec);
+                double angle = Math.acos(Math.max(-1.0, Math.min(1.0, dot / (rep.magnitude() * headingVec.magnitude()))));
+                double directionFactor = Math.max(Math.cos(mu * angle), dirRatio);
+                Vector omni = rep.scaledCopy(1.0);
+                applyMagnitudeFunction(omni, dist);
+                if (communication.isUAVHovering(obstacle)) omni.scalarProduct(1.2);
+                total = Vector.add(total, rep.scaledCopy(directionFactor));
+                total = Vector.add(total, omni);
+            }
+        }
+        if (total.magnitude() > maxspeed * 0.8) {
+            total.normalize();
+            total.scalarProduct(maxspeed * 0.8);
+        }
+        return total;
+    }
+
+    private void sendVelocityCommand(Vector velocity) {
+        if (velocity.magnitude() > maxspeed) {
+            velocity.normalize();
+            velocity.scalarProduct(maxspeed);
+        }
+        moveUAV(velocity);
+    }
+
+    private void moveUAV(Vector v) {
+        copter.moveTo(v.y, v.x, 0);
+    }
+
+    private Location3DUTM getCopterLocation() {
+        return new Location3DUTM(copter.getLocationUTM(), copter.getAltitude());
+    }
+
+    private double getHeading() {
+        return Math.toRadians(copter.getHeading());
+    }
 
     private Location3DUTM getLastTarget() {
-        return (waypoints != null && !waypoints.isEmpty()) ? waypoints.peek() : getCopterLocation();
+        return waypoints.isEmpty() ? getCopterLocation() : waypoints.peek();
     }
 
-
-    private void saveData(long protocolTime, long reconfigTime) {
-        String fileName;
-        if (magneticSwarmRecSimProperties.missionFile != null &&
-                !magneticSwarmRecSimProperties.missionFile.isEmpty()) {
-            fileName = magneticSwarmRecSimProperties.missionFile.get(0).getName().replace(".kml", "");
-        } else {
-            fileName = "default_mission";
-        }
-
-        File f = new File(fileName + "_results.csv");
-        int battery = copter.getBattery();
-        boolean includeHeader = !f.exists();
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(f, true))) {
-            if (includeHeader) {
-                writer.write("numUAV,numUAVs,minDistance(m),protocolTime(ms),reconfigTime(ms),battery(%),beaconingTime(ms)\n");
-            }
-
-            writer.write(String.format("%d,%d,%.2f,%d,%d,%d,%d\n",
-                    numUAV, numUAVs, minDistance, protocolTime, reconfigTime, battery,
-                    magneticSwarmRecSimProperties.beaconingTime));
-
-            // También mostramos por consola
-            System.out.printf("UAV %d - Distancia mínima registrada: %.2f m\n", numUAV, minDistance);
-
-            if (minDistance < magneticSwarmRecSimProperties.minFlightDistance) {
-                System.err.printf("COLISIÓN: UAV %d registró distancia %.2f m (mínimo permitido %.2f m)\n",
-                        numUAV, minDistance, magneticSwarmRecSimProperties.minFlightDistance);
-            }
-
-        } catch (IOException e) {
-            System.err.println("Error guardando resultados CSV: " + e.getMessage());
-        }
+    private void applyMagnitudeFunction(Vector v, double distance) {
+        double strength = Math.max(1.0 - (distance / magneticSwarmRecSimProperties.frd), 0.0);
+        v.scalarProduct(strength);
     }
 }
