@@ -9,7 +9,6 @@ import com.api.swarm.formations.FormationFactory;
 import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.protocols.magneticSwarmRec.pojo.HungarianAlgorithm;
 import com.protocols.magneticSwarmRec.pojo.Vector;
-import com.uavController.UAVParam;
 import es.upv.grc.mapper.Location3DGeo;
 import es.upv.grc.mapper.Location3DUTM;
 import org.javatuples.Pair;
@@ -102,61 +101,47 @@ public class magneticSwarmAvoidance extends Thread {
     }
 
     private void switchToFlyingFormation() {
-        System.out.printf("UAV %d - Iniciando switchToFlyingFormation()\n", numUAV);
-
         Formation target = FormationFactory.newFormation(
                 Formation.Layout.valueOf(magneticSwarmRecSimProperties.flyingFormation.toUpperCase())
         );
-
         target.init(numUAVs, magneticSwarmRecSimProperties.flyingDistance);
         double alt = magneticSwarmRecSimProperties.altitude;
 
+        // Calcular centro de la formación
         double latSum = 0.0, lonSum = 0.0;
         for (int i = 0; i < numUAVs; i++) {
             latSum += API.getCopter(i).getLocation().getLatitude();
             lonSum += API.getCopter(i).getLocation().getLongitude();
         }
-
         double centerLat = latSum / numUAVs;
         double centerLon = lonSum / numUAVs;
         Location3DUTM centerUTM = Location3DGeo.getUTM(centerLat, centerLon, alt);
 
-        // Debug: imprimir posiciones generadas
-        System.out.println("=== POSICIONES DE LA FORMACIÓN ===");
+        // Obtener posiciones actuales y destino
+        List<Location3DUTM> currentPositions = new ArrayList<>();
+        List<Location3DUTM> targetPositions = new ArrayList<>();
         for (int i = 0; i < numUAVs; i++) {
-            Location3DUTM p = target.get3DUTMLocation(centerUTM, i);
-            System.out.printf("[%d] -> (%.2f, %.2f, %.2f)\n", i, p.x, p.y, p.z);
+            currentPositions.add(new Location3DUTM(API.getCopter(i).getLocationUTM(), alt));
+            targetPositions.add(target.get3DUTMLocation(centerUTM, i));
         }
 
-        Location3DUTM[] formationPositions = new Location3DUTM[numUAVs];
-        Location3DUTM[] currentPositions = new Location3DUTM[numUAVs];
-        for (int i = 0; i < numUAVs; i++) {
-            formationPositions[i] = target.get3DUTMLocation(centerUTM, i);
-            currentPositions[i] = new Location3DUTM(API.getCopter(i).getLocationUTM(), alt);
+        // Asignación según tipo de formación
+        int[] assignment;
+        if (target.getLayout() == Formation.Layout.CIRCLE) {
+            assignment = assignByAngularSort(currentPositions, targetPositions, centerUTM);
+        } else {
+            assignment = assignAvoidingCrossesHungarian(currentPositions, targetPositions);
         }
 
-        double[][] costMatrix = new double[numUAVs][numUAVs];
+        // Mostrar asignación
         for (int i = 0; i < numUAVs; i++) {
-            for (int j = 0; j < numUAVs; j++) {
-                costMatrix[i][j] = currentPositions[i].distance3D(formationPositions[j]);
-            }
+            double dist = currentPositions.get(i).distance3D(targetPositions.get(assignment[i]));
+            System.out.printf("Asignación: UAV %d -> Posición %d | Distancia = %.2f\n", i, assignment[i], dist);
         }
 
-        int[] assignment = new HungarianAlgorithm(costMatrix).execute();
-
-        System.out.println("=== ASIGNACIÓN HÚNGARA ===");
-        for (int i = 0; i < numUAVs; i++) {
-            int assigned = assignment[i];
-            Location3DUTM start = currentPositions[i];
-            Location3DUTM goal = formationPositions[assigned];
-            System.out.printf("UAV %d -> Posición %d | (%.1f,%.1f) -> (%.1f,%.1f) | Dist=%.2f\n",
-                    i, assigned, start.x, start.y, goal.x, goal.y, start.distance3D(goal));
-
-
-        }
-
-        int assignedIndex = (numUAV < assignment.length) ? assignment[numUAV] : 0;
-        Location3DUTM targetPos = formationPositions[assignedIndex];
+        // Planificar movimiento del UAV actual
+        int assignedIndex = assignment[numUAV];
+        Location3DUTM targetPos = targetPositions.get(assignedIndex);
         Location3DUTM current = getCopterLocation();
 
         double midX = current.x + 0.7 * (targetPos.x - current.x);
@@ -166,6 +151,9 @@ public class magneticSwarmAvoidance extends Thread {
         waypoints.clear();
         waypoints.add(intermediate);
         waypoints.add(targetPos);
+
+        System.out.printf("UAV %d - Waypoint INTERMEDIO: (%.2f, %.2f)\n", numUAV, intermediate.x, intermediate.y);
+        System.out.printf("UAV %d - Waypoint FINAL: (%.2f, %.2f)\n", numUAV, targetPos.x, targetPos.y);
     }
 
 
@@ -244,4 +232,78 @@ public class magneticSwarmAvoidance extends Thread {
         double strength = Math.max(1.0 - (distance / magneticSwarmRecSimProperties.frd), 0.0);
         v.scalarProduct(strength);
     }
+    private int[] assignAvoidingCrossesHungarian(List<Location3DUTM> current, List<Location3DUTM> target) {
+        int n = current.size();
+        double[][] costMatrix = new double[n][n];
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                costMatrix[i][j] = current.get(i).distance3D(target.get(j));
+            }
+        }
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                Location3DUTM a1 = current.get(i);
+                Location3DUTM a2 = target.get(j);
+                for (int k = i + 1; k < n; k++) {
+                    for (int l = 0; l < n; l++) {
+                        if (j == l) continue;
+                        Location3DUTM b1 = current.get(k);
+                        Location3DUTM b2 = target.get(l);
+                        if (segmentsCross(a1, a2, b1, b2)) {
+                            costMatrix[i][j] += 10000;
+                            costMatrix[k][l] += 10000;
+                            System.out.printf("⚠️ Cruce detectado entre trayectorias: UAV%d → Pos%d y UAV%d → Pos%d\n", i, j, k, l);
+                        }
+                    }
+                }
+            }
+        }
+
+        return new HungarianAlgorithm(costMatrix).execute();
+    }
+
+    private boolean segmentsCross(Location3DUTM a1, Location3DUTM a2, Location3DUTM b1, Location3DUTM b2) {
+        return linesIntersect(a1.x, a1.y, a2.x, a2.y, b1.x, b1.y, b2.x, b2.y);
+    }
+
+    private boolean linesIntersect(double x1, double y1, double x2, double y2,
+                                   double x3, double y3, double x4, double y4) {
+        double d1 = direction(x3, y3, x4, y4, x1, y1);
+        double d2 = direction(x3, y3, x4, y4, x2, y2);
+        double d3 = direction(x1, y1, x2, y2, x3, y3);
+        double d4 = direction(x1, y1, x2, y2, x4, y4);
+        return (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+                ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)));
+    }
+
+    private double direction(double xi, double yi, double xj, double yj, double xk, double yk) {
+        return (xk - xi) * (yj - yi) - (xj - xi) * (yk - yi);
+    }
+    private int[] assignByAngularSort(List<Location3DUTM> currentPositions, List<Location3DUTM> targetPositions, Location3DUTM center) {
+        int n = currentPositions.size();
+        List<Pair<Double, Integer>> anglesCurrent = new ArrayList<>();
+        List<Pair<Double, Integer>> anglesTarget = new ArrayList<>();
+
+        for (int i = 0; i < n; i++) {
+            double aC = Math.atan2(currentPositions.get(i).y - center.y, currentPositions.get(i).x - center.x);
+            double aT = Math.atan2(targetPositions.get(i).y - center.y, targetPositions.get(i).x - center.x);
+            anglesCurrent.add(Pair.with(aC, i));
+            anglesTarget.add(Pair.with(aT, i));
+        }
+
+        anglesCurrent.sort(Comparator.comparingDouble(Pair::getValue0));
+        anglesTarget.sort(Comparator.comparingDouble(Pair::getValue0));
+
+        int[] assignment = new int[n];
+        for (int i = 0; i < n; i++) {
+            int uavId = anglesCurrent.get(i).getValue1();
+            int posId = anglesTarget.get(i).getValue1();
+            assignment[uavId] = posId;
+        }
+
+        return assignment;
+    }
+
 }

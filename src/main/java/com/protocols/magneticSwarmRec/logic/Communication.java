@@ -125,6 +125,18 @@ public class Communication extends Thread {
         return false;
     }
 
+    private static Location3DUTM sharedCenter;
+
+    public void broadcastCenter(Location3DUTM center) {
+        sharedCenter = center;
+    }
+
+    public Location3DUTM waitForCenter() {
+        while (sharedCenter == null) {
+            API.getArduSim().sleep(50);
+        }
+        return sharedCenter;
+    }
 
     private double getHeading() {
         return Math.toRadians(copter.getHeading()); // conversión a radianes
