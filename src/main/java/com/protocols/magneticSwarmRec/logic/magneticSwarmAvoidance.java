@@ -226,8 +226,13 @@ public class magneticSwarmAvoidance extends Thread {
                 Vector omni = rep.scaledCopy(1.0);
                 applyMagnitudeFunction(omni, dist);
                 if (communication.isUAVHovering(obstacle)) omni.scalarProduct(1.2);
+                System.out.printf("🌀 UAV %d repulsión hacia obstáculo a %.2f m\n", numUAV, dist);
+                System.out.printf("   ↪ Dir. factor: %.2f | Angle: %.2f rad\n", directionFactor, angle);
+                System.out.printf("   🔴 Direccional: (%.2f, %.2f)\n", rep.x * directionFactor, rep.y * directionFactor);
+                System.out.printf("   🔵 Omnidireccional: (%.2f, %.2f)\n", omni.x, omni.y);
                 total = Vector.add(total, rep.scaledCopy(directionFactor));
                 total = Vector.add(total, omni);
+                System.out.printf("   🟣 Repulsión total: (%.2f, %.2f) | Magnitud: %.2f\n", total.x, total.y, total.magnitude());
             }
         }
 
