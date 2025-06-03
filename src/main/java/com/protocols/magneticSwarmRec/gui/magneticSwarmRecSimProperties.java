@@ -23,8 +23,6 @@ public class magneticSwarmRecSimProperties {
     public static double NElon;
     public static String configMode = "FORMATION";
 
-    public static int numUAVs = 5;
-
     public static double minFlightDistance = 15;
     public static double altitude = 40;
     public static double frd = 30;
@@ -129,7 +127,9 @@ public class magneticSwarmRecSimProperties {
         if (frd < 0 || alpha < 0 || dirFactor < 0 || dirRatio < 0) return "Directional parameters must be non-negative";
         if (speed <= 0) return "speed must be positive";
         if (groundDistance <= 0 || flyingDistance <= 0) return "formation distances must be positive";
-        if (numUAVs < 1) return "numUAVs must be at least 1";
+        int numUAVs = API.getArduSim().getNumUAVs();
+        if (numUAVs < 1) return "Invalid number of UAVs from GUI";
+
 
         Set<String> validFormations = Set.of("LINEAR", "MATRIX", "CIRCLE", "CIRCLE2", "RANDOM");
         if (!validFormations.contains(groundFormation)) return "Invalid groundFormation: " + groundFormation;
@@ -145,20 +145,14 @@ public class magneticSwarmRecSimProperties {
 
         int loaded = missions.getValue1().length;
 
-        // Si la misión cargada define más UAVs, la respetamos
-        if (!randomPath && loaded > 0) {
-            API.getArduSim().setNumUAVs(loaded);
-            numUAVs = loaded;
-            ArduSimTools.warnGlobal("Aviso", "Número de UAVs ajustado a " + loaded + " según la misión cargada.");
-        } else {
-            API.getArduSim().setNumUAVs(numUAVs);
-        }
+        missionHelper.setMissionsLoaded(missions.getValue1());
+
     }
 
 
     private Pair<String, List<Waypoint>[]> setMissionWaypoints() {
         random = new Random(seed);
-        int count = numUAVs;
+        int count = API.getArduSim().getNumUAVs();
         MissionHelper missionHelper = API.getCopter(0).getMissionHelper();
 
         EnumValue<MavCmd> cmd_waypoint = EnumValue.of(MavCmd.MAV_CMD_NAV_WAYPOINT);

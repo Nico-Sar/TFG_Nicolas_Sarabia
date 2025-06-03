@@ -29,15 +29,6 @@
     <HBox spacing="10"><Label text="Beaconing Time (ms)" prefWidth="150"/><TextField fx:id="beaconingTime" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Seed" prefWidth="150"/><TextField fx:id="seed" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Repulsion Magnitude" prefWidth="150"/><TextField fx:id="repulsionMagnitude" prefWidth="200"/></HBox>
-
-    <HBox spacing="10">
-        <Label text="Number of UAVs" prefWidth="150"/>
-        <VBox spacing="5">
-            <TextField fx:id="numUAVs" prefWidth="200"/>
-            <Label fx:id="numUAVsWarning" text="Número de UAVs determinado por la misión." style="-fx-text-fill: red;" visible="false"/>
-        </VBox>
-    </HBox>
-
     <HBox spacing="10"><Label text="Ground Formation" prefWidth="150"/><ComboBox fx:id="groundFormation" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Flying Formation" prefWidth="150"/><ComboBox fx:id="flyingFormation" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Configuration Mode" prefWidth="150"/><ComboBox fx:id="configMode" prefWidth="200"/></HBox>

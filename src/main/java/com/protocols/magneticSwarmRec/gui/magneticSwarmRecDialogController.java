@@ -25,10 +25,9 @@ public class magneticSwarmRecDialogController {
 
     @FXML private TextField altitude, speed, frd, alpha, dirFactor, dirRatio, tDist;
     @FXML private TextField weightAttraction, weightRepulsion, minFlightDistance, beaconingTime, seed;
-    @FXML private TextField repulsionMagnitude, numUAVs;
+    @FXML private TextField repulsionMagnitude;
 
     @FXML private ComboBox<String> configMode, groundFormation, flyingFormation;
-    @FXML private Label numUAVsWarning;
 
     public magneticSwarmRecDialogController(ResourceBundle resources, magneticSwarmRecSimProperties properties, Stage stage) {
         this.resources = resources;
@@ -62,21 +61,6 @@ public class magneticSwarmRecDialogController {
             }
         });
 
-        // Comprobación si el número de UAVs debe ser editable
-        int numFromMission = API.getArduSim().getNumUAVs();
-        if (!magneticSwarmRecSimProperties.randomPath && numFromMission > 0) {
-            numUAVs.setText(String.valueOf(magneticSwarmRecSimProperties.numUAVs));
-            numUAVs.setDisable(false); // siempre editable
-            if (numUAVsWarning != null) {
-                numUAVsWarning.setVisible(false);
-            }
-        } else {
-            numUAVs.setText(String.valueOf(magneticSwarmRecSimProperties.numUAVs));
-            numUAVs.setDisable(false);
-            if (numUAVsWarning != null) {
-                numUAVsWarning.setVisible(false);
-            }
-        }
 
         okButton.setOnAction(e -> {
             if (ok()) {
