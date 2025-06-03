@@ -16,7 +16,7 @@ public class DrawVectors {
     private final List<AtomicReference<DrawableLinesGeo>> vectorLines;
     private final Copter copter;
 
-    public DrawVectors(Copter copter){
+    public DrawVectors(Copter copter) {
         this.copter = copter;
         this.vectorLines = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
@@ -35,9 +35,31 @@ public class DrawVectors {
                 drawVector(start, resulting, Color.GREEN, 2);   // Resultante
 
             } catch (LocationNotReadyException | GUIMapPanelNotReadyException e) {
-                e.printStackTrace();
+                System.err.println("❌ Error al dibujar vectores: " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Dibuja un punto visual en el mapa como una línea de longitud 0.
+     */
+    public void drawPoint(Location3DUTM point) {
+        try {
+            List<Location2DGeo> list = new ArrayList<>();
+            Location2DGeo geo = point.getGeo();
+            list.add(geo);
+            list.add(geo); // misma coordenada = línea invisible = punto visual
+            Mapper.Drawables.addLinesGeo(3, list, Color.MAGENTA, new BasicStroke(3f));
+        } catch (Exception e) {
+            System.err.println("❌ Error al dibujar punto: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Alias de drawPoint: para marcar puntos de formación visualmente.
+     */
+    public void drawCircle(Location3DUTM center) {
+        drawPoint(center);
     }
 
     private void removeOldDrawings() {
@@ -47,7 +69,7 @@ public class DrawVectors {
                 try {
                     Mapper.Drawables.removeDrawable(current);
                 } catch (GUIMapPanelNotReadyException e) {
-                    e.printStackTrace();
+                    System.err.println("❌ Error al eliminar dibujo anterior: " + e.getMessage());
                 }
             }
         }
@@ -67,4 +89,19 @@ public class DrawVectors {
         DrawableLinesGeo line = Mapper.Drawables.addLinesGeo(3, vectorGeo, color, new BasicStroke(2f));
         vectorLines.get(index).set(line);
     }
+    public void drawPolygon(List<Location3DUTM> points) {
+        try {
+            List<Location2DGeo> geoPoints = new ArrayList<>();
+            for (Location3DUTM utm : points) {
+                geoPoints.add(utm.getGeo());
+            }
+            // Cierra el contorno uniendo último con primero
+            geoPoints.add(geoPoints.get(0));
+
+            Mapper.Drawables.addLinesGeo(3, geoPoints, Color.ORANGE, new BasicStroke(1.5f));
+        } catch (Exception e) {
+            System.err.println("❌ Error al dibujar polígono: " + e.getMessage());
+        }
+    }
+
 }
