@@ -93,6 +93,11 @@ public class Vector {
         this.x = -this.x;
         this.y = -this.y;
     }
+    public Vector normalized() {
+        double mag = this.magnitude();
+        if (mag == 0.0) return new Vector(0, 0);
+        return new Vector(this.x / mag, this.y / mag);
+    }
 
 
     public void multiply(double factor) {

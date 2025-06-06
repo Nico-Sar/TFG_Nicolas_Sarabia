@@ -7,8 +7,10 @@ import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.protocols.magneticSwarmRec.pojo.Message;
 import com.protocols.magneticSwarmRec.pojo.UAVStateEntry;
 import es.upv.grc.mapper.Location3DUTM;
+
 import org.javatuples.Pair;
 import org.json.JSONObject;
+import com.protocols.magneticSwarmRec.pojo.Vector;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,6 +21,8 @@ public class Communication extends Thread {
     private final Copter copter;
     private final HighlevelCommLink commLink;
     private final Map<Integer, UAVStateEntry> locations;
+    private final Map<Integer, Pair<Location3DUTM, Vector>> projectedRepulsions;
+
     private boolean running;
     private boolean isHovering = false;
 
@@ -27,6 +31,7 @@ public class Communication extends Thread {
         this.copter = API.getCopter(numUAV);
         this.commLink = new HighlevelCommLink(numUAV, 1, 1);
         this.locations = new ConcurrentHashMap<>();
+        this.projectedRepulsions = new ConcurrentHashMap<>();
         this.running = true;
     }
 
@@ -115,6 +120,7 @@ public class Communication extends Thread {
     private Location3DUTM getCopterLocation() {
         return new Location3DUTM(copter.getLocationUTM(), 0);
     }
+
     public boolean isUAVHovering(Location3DUTM location) {
         for (Map.Entry<Integer, UAVStateEntry> entry : locations.entrySet()) {
             Location3DUTM loc = entry.getValue().positionAndHeading.getValue0();
@@ -139,6 +145,22 @@ public class Communication extends Thread {
     }
 
     private double getHeading() {
-        return Math.toRadians(copter.getHeading()); // conversión a radianes
+        return Math.toRadians(copter.getHeading());
+    }
+
+    // 🚀 NUEVO: Actualizar campo de repulsión proyectado
+    public void updateProjectedRepulsion(int uavId, Location3DUTM location, Vector escapeVector) {
+        projectedRepulsions.put(uavId, new Pair<>(location, escapeVector));
+    }
+
+    // 🚀 NUEVO: Obtener campos de repulsión proyectados por otros UAVs
+    public List<Pair<Location3DUTM, Vector>> getProjectedRepulsions(int selfId) {
+        List<Pair<Location3DUTM, Vector>> result = new ArrayList<>();
+        for (Map.Entry<Integer, Pair<Location3DUTM, Vector>> entry : projectedRepulsions.entrySet()) {
+            if (entry.getKey() != selfId) {
+                result.add(entry.getValue());
+            }
+        }
+        return result;
     }
 }
