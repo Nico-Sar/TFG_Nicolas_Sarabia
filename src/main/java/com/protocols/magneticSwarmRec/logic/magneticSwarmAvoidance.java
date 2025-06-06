@@ -58,6 +58,7 @@ public class magneticSwarmAvoidance extends Thread {
         communication.start();
         switchToFlyingFormation();
         formationStartTime = System.currentTimeMillis();
+
         while (true) {
             switch (state) {
                 case MOVING:
@@ -70,41 +71,15 @@ public class magneticSwarmAvoidance extends Thread {
                     Location3DUTM current = getCopterLocation();
                     double dist = current.distance3D(destino);
 
-                    Vector attraction = getAttractionVector();
+                    double slowdownFactor = calculateDirectionalSlowdownFactor();
+
+                    Vector attraction = getAttractionVector(slowdownFactor);
                     Vector repulsion = calculateHybridRepulsion();
                     penalizeAttractionIfNeeded(attraction, repulsion, dist);
 
                     Vector total = Vector.add(attraction, repulsion);
                     checkPotentialCollision(total);
                     sendVelocityCommand(total);
-
-                    long timestamp = System.currentTimeMillis() - API.getArduSim().getExperimentStartTime();
-                    double[] vel = copter.getSpeedComponents();
-
-                    String jitterType = "none";
-                    if (total.magnitude() < 0.2 && attempts > 30) {
-                        jitterType = "soft";
-                    } else if (total.magnitude() < 0.5 && current.distance3D(getLastTarget()) < 6.0) {
-                        jitterType = "escape";
-                    }
-
-                    double penalty = (repulsion.magnitude() > 0.2 * maxspeed && dist > 5.0)
-                            ? Math.max(0.5, 1.0 - repulsion.magnitude() / maxspeed)
-                            : 1.0;
-
-                    logger.log(
-                            timestamp,
-                            current,
-                            vel,
-                            dist,
-                            repulsion.magnitude(),
-                            attraction.magnitude(),
-                            total.magnitude(),
-                            jitterType,
-                            penalty,
-                            attempts,
-                            state.name()
-                    );
 
                     if (dist < threshold && isUAVStable()) {
                         waypoints.poll();
@@ -146,36 +121,39 @@ public class magneticSwarmAvoidance extends Thread {
         }
     }
 
-    private void checkPotentialCollision(Vector velocity) {
-        for (Pair<Location3DUTM, Double> obs : communication.getObstaclesWithHeading()) {
-            Location3DUTM other = obs.getValue0();
-            double dist = getCopterLocation().distance3D(other);
-            if (dist < 3.0) {
-                System.out.printf("❌ Posible colisión: UAV %d muy cerca de otro UAV (%.2f m)\n", numUAV, dist);
+    private double calculateDirectionalSlowdownFactor() {
+        List<Pair<Location3DUTM, Double>> obstacles = communication.getObstaclesWithHeading();
+        Vector headingVec = headingVec();
+        double maxSlowdown = 1.0;
+        double minSlowdown = 0.3;
+        double slowdown = maxSlowdown;
+        Location3DUTM currentPos = getCopterLocation();
+
+        for (Pair<Location3DUTM, Double> obs : obstacles) {
+            Location3DUTM obstacle = obs.getValue0();
+            double dist = currentPos.distance3D(obstacle);
+            if (dist < 15) {
+                Vector toObstacle = new Vector(currentPos, obstacle);
+                toObstacle.normalize();
+
+                double dot = toObstacle.dot(headingVec);
+                if (dot > 0) { // acercándose
+                    double factor = minSlowdown + (maxSlowdown - minSlowdown) * (dist / 15.0) * (1.0 - dot);
+                    if (factor < slowdown) slowdown = factor;
+                }
             }
         }
-    }
-
-    private void takeoff() {
-        TakeOff takeOff = copter.takeOff(magneticSwarmRecSimProperties.altitude, new TakeOffListener() {
-            public void onCompleteActionPerformed() {}
-            public void onFailure() {}
-        });
-        takeOff.start();
-        try {
-            takeOff.join();
-            barrier.await();
-            logger.setFlightStartTime(System.currentTimeMillis());
-        } catch (Exception ignored) {}
+        return slowdown;
     }
 
     private void switchToFlyingFormation() {
-        Formation target = FormationFactory.newFormation(
-                Formation.Layout.valueOf(magneticSwarmRecSimProperties.flyingFormation.toUpperCase())
-        );
+        Formation.Layout layout = Formation.Layout.valueOf(magneticSwarmRecSimProperties.flyingFormation.toUpperCase());
+
+        Formation target = FormationFactory.newFormation(layout);
         target.init(numUAVs, magneticSwarmRecSimProperties.flyingDistance);
         double alt = magneticSwarmRecSimProperties.altitude;
 
+        // Calcular centro de la formación
         double latSum = 0.0, lonSum = 0.0;
         for (int i = 0; i < numUAVs; i++) {
             latSum += API.getCopter(i).getLocation().getLatitude();
@@ -204,26 +182,46 @@ public class magneticSwarmAvoidance extends Thread {
             targetPositions.add(target.get3DUTMLocation(centerUTM, i));
         }
 
-        int[] assignment = assignWithMinimalInterference(currentPositions, targetPositions);
+        if (layout == Formation.Layout.LINEAR) {
+            int[] assignment = assignWithMinimalInterference(currentPositions, targetPositions);
 
-        for (int i = 0; i < numUAVs; i++) {
-            double dist = currentPositions.get(i).distance3D(targetPositions.get(assignment[i]));
-            System.out.printf("📍 Asignación: UAV %d -> Posición %d | Distancia = %.2f\n", i, assignment[i], dist);
+            int assignedIndex = assignment[numUAV];
+            Location3DUTM finalWaypoint = targetPositions.get(assignedIndex);
+            Location3DUTM currentPos = currentPositions.get(numUAV);
+
+            Location3DUTM intermediateWaypoint = new Location3DUTM(finalWaypoint.x, currentPos.y, alt);
+
+            waypoints.clear();
+            waypoints.add(intermediateWaypoint);
+            waypoints.add(finalWaypoint);
+
+            finalTarget = finalWaypoint;
+
+            System.out.printf("📦 UAV %d - Desde (%.2f, %.2f)\n", numUAV, currentPos.x, currentPos.y);
+            System.out.printf("➡ UAV %d - Waypoint intermedio: (%.2f, %.2f)\n", numUAV, intermediateWaypoint.x, intermediateWaypoint.y);
+            System.out.printf("🎯 UAV %d - Waypoint FINAL: (%.2f, %.2f)\n", numUAV, finalWaypoint.x, finalWaypoint.y);
+        } else {
+            int[] assignment = assignWithMinimalInterference(currentPositions, targetPositions);
+
+            for (int i = 0; i < numUAVs; i++) {
+                double dist = currentPositions.get(i).distance3D(targetPositions.get(assignment[i]));
+                System.out.printf("📍 Asignación: UAV %d -> Posición %d | Distancia = %.2f\n", i, assignment[i], dist);
+            }
+
+            int assignedIndex = assignment[numUAV];
+            Location3DUTM targetPos = targetPositions.get(assignedIndex);
+            Location3DUTM current = getCopterLocation();
+            finalTarget = targetPos;
+
+            System.out.printf("📦 UAV %d - Desde (%.2f, %.2f)\n", numUAV, current.x, current.y);
+            System.out.printf("🎯 UAV %d - Waypoint FINAL: (%.2f, %.2f)\n", numUAV, targetPos.x, targetPos.y);
+
+            waypoints.clear();
+            waypoints.add(targetPos);
         }
-
-        int assignedIndex = assignment[numUAV];
-        Location3DUTM targetPos = targetPositions.get(assignedIndex);
-        Location3DUTM current = getCopterLocation();
-        finalTarget = targetPos;
-
-        System.out.printf("📦 UAV %d - Desde (%.2f, %.2f)\n", numUAV, current.x, current.y);
-        System.out.printf("🎯 UAV %d - Waypoint FINAL: (%.2f, %.2f)\n", numUAV, targetPos.x, targetPos.y);
-
-        waypoints.clear();
-        waypoints.add(targetPos);
     }
 
-    private Vector getAttractionVector() {
+    private Vector getAttractionVector(double slowdownFactor) {
         Location3DUTM current = getCopterLocation();
         Location3DUTM target = waypoints.peek();
         double dist = current.distance3D(target);
@@ -231,35 +229,35 @@ public class magneticSwarmAvoidance extends Thread {
         Vector attraction = new Vector(current, target);
         attraction.normalize();
 
-        double speed;
-        if (dist > 50) {
-            speed = maxspeed;
-        } else if (dist > 30) {
-            speed = maxspeed * 0.7;
-        } else if (dist > 15) {
-            speed = maxspeed * 0.5;
-        } else if (dist > 7) {
-            speed = maxspeed * 0.3;
-        } else {
-            speed = maxspeed * 0.15;
-        }
+        int neighbors = countNeighborsWithinRadius(25.0);
 
+        double adaptiveMaxSpeed = calculateAdaptiveMaxSpeed(neighbors, dist);
+
+        double speed = calculateSpeedBasedOnNeighbors(adaptiveMaxSpeed, neighbors);
+
+        speed = applyDistanceSpeedLimit(speed, adaptiveMaxSpeed, dist);
+
+        // Aplicar desaceleración por acercamiento
+        speed *= slowdownFactor;
+
+        // Atenuar atracción suavemente al acercarse para evitar overshoot y drifting
         if (dist < 1.5) {
-            System.out.printf("🛑 UAV %d sin atracción (muy cerca del objetivo, %.2f m)\n", numUAV, dist);
-            return new Vector(0, 0);
+            speed *= (dist / 1.5);  // escala entre 0 y 1 según proximidad
+            if (speed < 0.05) speed = 0; // umbral mínimo para evitar que siga moviéndose sin control
         }
 
-        System.out.printf("🧲 UAV %d - Atracción %.2f m/s hacia objetivo (%.2f m)\n", numUAV, speed, dist);
+        if (speed == 0) return new Vector(0, 0);
 
         attraction.scalarProduct(speed);
         return attraction;
     }
 
+
     private Vector calculateHybridRepulsion() {
         Vector total = new Vector();
         List<Pair<Location3DUTM, Double>> obstacles = communication.getObstaclesWithHeading();
         Vector headingVec = headingVec();
-        double cutoff = 15.0; // escudo protector máximo 15 m
+        double cutoff = 15.0;
         double mu = magneticSwarmRecSimProperties.dirFactor;
         double dirRatio = magneticSwarmRecSimProperties.dirRatio;
 
@@ -305,11 +303,9 @@ public class magneticSwarmAvoidance extends Thread {
         if (distance >= 15.0) {
             return 0.0;
         } else if (distance >= 10.0) {
-            return maxspeed * (1.0 - (distance - 10.0) / 5.0);
-        } else if (distance >= 1.0) {
-            return maxspeed * 1.0;
+            return maxspeed * (0.5 + 0.1 * (15.0 - distance));
         } else {
-            return maxspeed * distance;
+            return maxspeed * 2.0;
         }
     }
 
@@ -359,6 +355,36 @@ public class magneticSwarmAvoidance extends Thread {
         return waypoints.isEmpty() ? getCopterLocation() : waypoints.peek();
     }
 
+    private int countNeighborsWithinRadius(double radius) {
+        int count = 0;
+        Location3DUTM current = getCopterLocation();
+        for (Pair<Location3DUTM, Double> obs : communication.getObstaclesWithHeading()) {
+            if (current.distance3D(obs.getValue0()) <= radius) count++;
+        }
+        return count;
+    }
+
+    private double calculateAdaptiveMaxSpeed(int neighbors, double dist) {
+        double baseSpeed = maxspeed;
+        if (neighbors == 0 && dist > 10) baseSpeed = maxspeed * 1.2;
+        return baseSpeed;
+    }
+
+    private double calculateSpeedBasedOnNeighbors(double adaptiveMaxSpeed, int neighbors) {
+        if (neighbors == 0) return adaptiveMaxSpeed * 1.0;
+        if (neighbors <= 4) return adaptiveMaxSpeed * 0.75;
+        if (neighbors <= 8) return adaptiveMaxSpeed * 0.5;
+        return adaptiveMaxSpeed * 0.3;
+    }
+
+    private double applyDistanceSpeedLimit(double speed, double adaptiveMaxSpeed, double dist) {
+        if (dist > 50) return Math.min(speed, adaptiveMaxSpeed);
+        if (dist > 30) return Math.min(speed, adaptiveMaxSpeed * 0.3);
+        if (dist > 15) return Math.min(speed, adaptiveMaxSpeed * 0.15);
+        if (dist > 7) return Math.min(speed, adaptiveMaxSpeed * 0.10);
+        return Math.min(speed, adaptiveMaxSpeed * 0.05);
+    }
+
     private int[] assignWithMinimalInterference(List<Location3DUTM> current, List<Location3DUTM> target) {
         int n = current.size();
         double[][] costMatrix = new double[n][n];
@@ -390,4 +416,27 @@ public class magneticSwarmAvoidance extends Thread {
         HungarianAlgorithm hungarian = new HungarianAlgorithm(costMatrix);
         return hungarian.execute();
     }
+    private void takeoff() {
+        TakeOff takeOff = copter.takeOff(magneticSwarmRecSimProperties.altitude, new TakeOffListener() {
+            public void onCompleteActionPerformed() {}
+            public void onFailure() {}
+        });
+        takeOff.start();
+        try {
+            takeOff.join();
+            barrier.await();
+            logger.setFlightStartTime(System.currentTimeMillis());
+        } catch (Exception ignored) {}
+    }
+
+    private void checkPotentialCollision(Vector velocity) {
+        for (Pair<Location3DUTM, Double> obs : communication.getObstaclesWithHeading()) {
+            Location3DUTM other = obs.getValue0();
+            double dist = getCopterLocation().distance3D(other);
+            if (dist < 3.0) {
+                System.out.printf("❌ Posible colisión: UAV %d muy cerca de otro UAV (%.2f m)\n", numUAV, dist);
+            }
+        }
+    }
+
 }
