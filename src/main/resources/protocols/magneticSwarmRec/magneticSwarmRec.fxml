@@ -8,30 +8,33 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
-      spacing="8">
+<VBox xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" spacing="8">
     <padding>
         <Insets top="20" right="20" bottom="20" left="20"/>
     </padding>
 
     <Label text="Magnetic Swarm Reconfiguration Parameters" style="-fx-font-size: 16px; -fx-font-weight: bold;" />
 
-    <HBox spacing="10"><Label text="Altitude" prefWidth="150"/><TextField fx:id="altitude" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Speed (m/s)" prefWidth="150"/><TextField fx:id="speed" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Full Repulsion Distance (frd)" prefWidth="150"/><TextField fx:id="frd" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Alpha (width)" prefWidth="150"/><TextField fx:id="alpha" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Direction Factor (df)" prefWidth="150"/><TextField fx:id="dirFactor" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Direction Ratio (dr)" prefWidth="150"/><TextField fx:id="dirRatio" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Trajectory Distance (tDist)" prefWidth="150"/><TextField fx:id="tDist" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Threshold (m)" prefWidth="150"/><TextField fx:id="threshold" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Min Flight Distance (m)" prefWidth="150"/><TextField fx:id="minFlightDistance" prefWidth="200"/></HBox>
+
+    <HBox spacing="10"><Label text="Omni Repulsion Range (frdOmni)" prefWidth="150"/><TextField fx:id="frdOmni" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Dir Repulsion Range (frdDir)" prefWidth="150"/><TextField fx:id="frdDir" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Max Repulsion Factor" prefWidth="150"/><TextField fx:id="maxRepulsionFactor" prefWidth="200"/></HBox>
+
+    <HBox spacing="10"><Label text="Omni Repulsion Strength" prefWidth="150"/><TextField fx:id="omniRepulsionStrength" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Dir Repulsion Strength" prefWidth="150"/><TextField fx:id="dirRepulsionStrength" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Direction Factor" prefWidth="150"/><TextField fx:id="dirFactor" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Direction Ratio" prefWidth="150"/><TextField fx:id="dirRatio" prefWidth="200"/></HBox>
+
     <HBox spacing="10"><Label text="Weight Attraction" prefWidth="150"/><TextField fx:id="weightAttraction" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Weight Repulsion" prefWidth="150"/><TextField fx:id="weightRepulsion" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Min Flight Distance" prefWidth="150"/><TextField fx:id="minFlightDistance" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Beaconing Time (ms)" prefWidth="150"/><TextField fx:id="beaconingTime" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Seed" prefWidth="150"/><TextField fx:id="seed" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Repulsion Magnitude" prefWidth="150"/><TextField fx:id="repulsionMagnitude" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Angle Weight (assignment)" prefWidth="150"/><TextField fx:id="angleWeight" prefWidth="200"/></HBox>
+
     <HBox spacing="10"><Label text="Ground Formation" prefWidth="150"/><ComboBox fx:id="groundFormation" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Flying Formation" prefWidth="150"/><ComboBox fx:id="flyingFormation" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Configuration Mode" prefWidth="150"/><ComboBox fx:id="configMode" prefWidth="200"/></HBox>
+    <HBox spacing="10"><Label text="Neighbor Detection Radius" prefWidth="150"/><TextField fx:id="neighborDetectionRadius" prefWidth="200"/></HBox>
 
     <Button fx:id="okButton" text="OK" prefWidth="100" style="-fx-font-size: 14px; -fx-font-weight: bold;" />
 </VBox>

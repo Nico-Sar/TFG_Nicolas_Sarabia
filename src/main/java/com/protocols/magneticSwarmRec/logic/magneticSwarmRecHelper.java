@@ -42,7 +42,6 @@ public class magneticSwarmRecHelper extends ProtocolHelper {
 
     @Override
     public void openConfigurationDialogFX() {
-        // 🔄 Cargar los valores del archivo antes de abrir la GUI
         try (FileInputStream fis = new FileInputStream(SimParam.protocolParamFile)) {
             ResourceBundle resources = new PropertyResourceBundle(fis);
             Properties props = new Properties();
@@ -55,9 +54,18 @@ public class magneticSwarmRecHelper extends ProtocolHelper {
             ArduSimTools.warnGlobal(Text.LOADING_ERROR, "No se pudo cargar el archivo de parámetros.");
         }
 
-        // 🖼 Mostrar interfaz de configuración
-        Platform.runLater(() -> new magneticSwarmRecDialogApp().start(new Stage()));
+        // ✅ Lanzar el FXML en el hilo de JavaFX
+        Platform.runLater(() -> {
+            try {
+                new magneticSwarmRecDialogApp().start(new Stage());
+            } catch (Exception e) {
+                e.printStackTrace();
+                ArduSimTools.warnGlobal(Text.LOADING_ERROR, "Error al iniciar la interfaz gráfica.");
+            }
+        });
     }
+
+
 
     @Override
     public void configurationCLI() {

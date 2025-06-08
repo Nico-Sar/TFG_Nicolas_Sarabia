@@ -3,11 +3,9 @@ package com.protocols.magneticSwarmRec.logic;
 import com.api.API;
 import com.api.communications.HighlevelCommLink;
 import com.api.copter.Copter;
-import com.protocols.magneticSwarmRec.gui.magneticSwarmRecSimProperties;
 import com.protocols.magneticSwarmRec.pojo.Message;
 import com.protocols.magneticSwarmRec.pojo.UAVStateEntry;
 import es.upv.grc.mapper.Location3DUTM;
-
 import org.javatuples.Pair;
 import org.json.JSONObject;
 import com.protocols.magneticSwarmRec.pojo.Vector;
@@ -16,6 +14,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Communication extends Thread {
+
+    private static final int BEACONING_TIME = 100; // ms fijo
 
     private final int numUAV;
     private final Copter copter;
@@ -55,7 +55,7 @@ public class Communication extends Thread {
                 JSONObject msg = commLink.receiveMessage(Message.location(numUAV));
                 long currentTime = System.currentTimeMillis();
 
-                while (msg != null && timeDif < magneticSwarmRecSimProperties.beaconingTime) {
+                while (msg != null && timeDif < BEACONING_TIME) {
                     int senderId = (Integer) msg.get(HighlevelCommLink.Keywords.SENDERID);
                     Pair<Location3DUTM, Double> data = Message.processLocationWithHeading(msg);
                     String state = Message.getState(msg);
@@ -68,8 +68,8 @@ public class Communication extends Thread {
                 e.printStackTrace();
             }
 
-            if (timeDif < magneticSwarmRecSimProperties.beaconingTime) {
-                API.getArduSim().sleep(magneticSwarmRecSimProperties.beaconingTime - timeDif);
+            if (timeDif < BEACONING_TIME) {
+                API.getArduSim().sleep(BEACONING_TIME - timeDif);
             }
         }
     }

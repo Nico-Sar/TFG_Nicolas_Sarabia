@@ -17,35 +17,36 @@ import java.util.*;
 
 public class magneticSwarmRecSimProperties {
 
-    public static double SWlat;
-    public static double SWlon;
-    public static double NElat;
-    public static double NElon;
-    public static String configMode = "FORMATION";
-
-    public static double minFlightDistance = 15;
-    public static double altitude = 40;
-    public static double frd = 30;
-    public static double alpha = 20;
-    public static double dirFactor = 2;
+    // === Parámetros configurables desde el FXML ===
+    public static double speed = 5.0;
+    public static double threshold = 2.5;
+    public static double minFlightDistance = 10.0;
+    public static double frdOmni = 15.0;
+    public static double frdDir = 30.0;
+    public static double maxRepulsionFactor = 0.6;
+    public static double omniRepulsionStrength = 2.0;
+    public static double dirRepulsionStrength = 0.7;
+    public static double dirFactor = 2.5;
     public static double dirRatio = 0.3;
-    public static double tDist = 50;
-
     public static double weightAttraction = 1.0;
     public static double weightRepulsion = 1.0;
-
-    public static int beaconingTime = 200;
-    public static int seed = 42;
-    public static double speed = 5.0;
-
-    public static String repulsionMagnitude = "-(-frd/a + x/a)^2 + 20";
-    public static boolean randomPath;
-    public static List<File> missionFile;
+    public static double angleWeight = 30.0;
+    public static double neighborDetectionRadius = 25.0;
 
     public static String groundFormation = "LINEAR";
     public static String flyingFormation = "MATRIX";
-    public static double groundDistance = 15.0;
-    public static double flyingDistance = 20.0;
+    public static String configMode = "FORMATION";
+
+
+    public static double groundDistance = 50.0;
+    public static double flyingDistance = 50.0;
+
+    // === Parámetros adicionales internos ===
+    public static double altitude = 10;
+    public static boolean randomPath = false;
+    public static int seed = 42;
+    public static double SWlat, SWlon, NElat, NElon;
+    public static List<File> missionFile;
 
     private Random random;
 
@@ -71,7 +72,7 @@ public class magneticSwarmRecSimProperties {
                 if (value == null || value.trim().isEmpty()) continue;
                 String type = var.getType().toString();
 
-                if (key.equals("groundFormation") || key.equals("flyingFormation") || key.equals("configMode")) {
+                if (key.equals("groundFormation") || key.equals("flyingFormation")) {
                     var.set(this, value.trim().toUpperCase());
                     continue;
                 }
@@ -108,7 +109,6 @@ public class magneticSwarmRecSimProperties {
 
         String error = specificCheckVariables();
         if (error == null) {
-            setSimulationParameters();
             return true;
         } else {
             ArduSimTools.warnGlobal(Text.LOADING_ERROR, "Error in parameter: " + error);
@@ -124,31 +124,26 @@ public class magneticSwarmRecSimProperties {
             }
         }
 
-        if (frd < 0 || alpha < 0 || dirFactor < 0 || dirRatio < 0) return "Directional parameters must be non-negative";
+        if (frdOmni < 0 || frdDir < 0 || maxRepulsionFactor < 0 || dirFactor < 0 || dirRatio < 0)
+            return "Repulsion parameters must be non-negative";
         if (speed <= 0) return "speed must be positive";
         if (groundDistance <= 0 || flyingDistance <= 0) return "formation distances must be positive";
+
         int numUAVs = API.getArduSim().getNumUAVs();
         if (numUAVs < 1) return "Invalid number of UAVs from GUI";
 
-
-        Set<String> validFormations = Set.of("LINEAR", "MATRIX", "CIRCLE", "CIRCLE2", "RANDOM");
+        Set<String> validFormations = Set.of("LINEAR", "MATRIX", "CIRCLE");
         if (!validFormations.contains(groundFormation)) return "Invalid groundFormation: " + groundFormation;
         if (!validFormations.contains(flyingFormation)) return "Invalid flyingFormation: " + flyingFormation;
 
         return null;
     }
 
-    private void setSimulationParameters() {
+    public void setSimulationParameters() {
         Pair<String, List<Waypoint>[]> missions = randomPath ? setMissionWaypoints() : API.getGUI(0).loadMissions(missionFile);
         MissionHelper missionHelper = API.getCopter(0).getMissionHelper();
         missionHelper.setMissionsLoaded(missions.getValue1());
-
-        int loaded = missions.getValue1().length;
-
-        missionHelper.setMissionsLoaded(missions.getValue1());
-
     }
-
 
     private Pair<String, List<Waypoint>[]> setMissionWaypoints() {
         random = new Random(seed);
