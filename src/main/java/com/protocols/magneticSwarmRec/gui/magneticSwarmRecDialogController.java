@@ -25,7 +25,7 @@ public class magneticSwarmRecDialogController {
     @FXML private TextField speed, threshold, minFlightDistance;
     @FXML private TextField frdOmni, frdDir, maxRepulsionFactor;
     @FXML private TextField omniRepulsionStrength, dirRepulsionStrength;
-    @FXML private TextField dirFactor, dirRatio;
+    @FXML private TextField dirFactor;
     @FXML private TextField weightAttraction, weightRepulsion;
     @FXML private TextField angleWeight, neighborDetectionRadius;
 
@@ -107,7 +107,6 @@ public class magneticSwarmRecDialogController {
             omniRepulsionStrength.setText(String.valueOf(magneticSwarmRecSimProperties.omniRepulsionStrength));
             dirRepulsionStrength.setText(String.valueOf(magneticSwarmRecSimProperties.dirRepulsionStrength));
             dirFactor.setText(String.valueOf(magneticSwarmRecSimProperties.dirFactor));
-            dirRatio.setText(String.valueOf(magneticSwarmRecSimProperties.dirRatio));
             weightAttraction.setText(String.valueOf(magneticSwarmRecSimProperties.weightAttraction));
             weightRepulsion.setText(String.valueOf(magneticSwarmRecSimProperties.weightRepulsion));
             angleWeight.setText(String.valueOf(magneticSwarmRecSimProperties.angleWeight));

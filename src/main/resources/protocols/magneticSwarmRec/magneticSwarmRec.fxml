@@ -26,7 +26,6 @@
     <HBox spacing="10"><Label text="Omni Repulsion Strength" prefWidth="150"/><TextField fx:id="omniRepulsionStrength" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Dir Repulsion Strength" prefWidth="150"/><TextField fx:id="dirRepulsionStrength" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Direction Factor" prefWidth="150"/><TextField fx:id="dirFactor" prefWidth="200"/></HBox>
-    <HBox spacing="10"><Label text="Direction Ratio" prefWidth="150"/><TextField fx:id="dirRatio" prefWidth="200"/></HBox>
 
     <HBox spacing="10"><Label text="Weight Attraction" prefWidth="150"/><TextField fx:id="weightAttraction" prefWidth="200"/></HBox>
     <HBox spacing="10"><Label text="Weight Repulsion" prefWidth="150"/><TextField fx:id="weightRepulsion" prefWidth="200"/></HBox>

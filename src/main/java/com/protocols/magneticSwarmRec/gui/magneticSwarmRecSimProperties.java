@@ -27,7 +27,6 @@ public class magneticSwarmRecSimProperties {
     public static double omniRepulsionStrength = 2.0;
     public static double dirRepulsionStrength = 0.7;
     public static double dirFactor = 2.5;
-    public static double dirRatio = 0.3;
     public static double weightAttraction = 1.0;
     public static double weightRepulsion = 1.0;
     public static double angleWeight = 30.0;
@@ -124,7 +123,7 @@ public class magneticSwarmRecSimProperties {
             }
         }
 
-        if (frdOmni < 0 || frdDir < 0 || maxRepulsionFactor < 0 || dirFactor < 0 || dirRatio < 0)
+        if (frdOmni < 0 || frdDir < 0 || maxRepulsionFactor < 0 || dirFactor < 0)
             return "Repulsion parameters must be non-negative";
         if (speed <= 0) return "speed must be positive";
         if (groundDistance <= 0 || flyingDistance <= 0) return "formation distances must be positive";

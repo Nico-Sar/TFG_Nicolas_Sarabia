@@ -152,7 +152,7 @@ public class magneticSwarmRecHelper extends ProtocolHelper {
     @Override
     public void startExperimentActionPerformed() {
         for (int i = 0; i < API.getArduSim().getNumUAVs(); i++) {
-            new magneticSwarmAvoidance(i).start();
+            new MSR(i).start();
         }
     }
 
